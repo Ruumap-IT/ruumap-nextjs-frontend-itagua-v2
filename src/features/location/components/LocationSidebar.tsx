@@ -1,7 +1,6 @@
 "use client";
 
-import DOMPurify from "isomorphic-dompurify";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Image from "next/image";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useContactLinks } from "@/hooks/useContactLinks";
@@ -22,11 +21,20 @@ export default function LocationSidebar({ isOpen, onClose }: LocationSidebarProp
   
   const resolvedLogo = useAssetResolver(project?.logo?.url);
 
-  const cleanDescription = useMemo(() => {
-    if (!project?.description) return "";
-    return DOMPurify.sanitize(project.description, {
-      ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "b", "i", "span", "div", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "a", "section", "main"],
-      ALLOWED_ATTR: ["href", "target", "rel", "class", "style"],
+  const [cleanDescription, setCleanDescription] = useState<string>("");
+
+  useEffect(() => {
+    if (!project?.description) {
+      setCleanDescription("");
+      return;
+    }
+    import("isomorphic-dompurify").then((DOMPurify) => {
+      setCleanDescription(
+        DOMPurify.default.sanitize(project.description, {
+          ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "b", "i", "span", "div", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "a", "section", "main"],
+          ALLOWED_ATTR: ["href", "target", "rel", "class", "style"],
+        })
+      );
     });
   }, [project?.description]);
 
