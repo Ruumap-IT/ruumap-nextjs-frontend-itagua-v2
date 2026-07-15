@@ -1,0 +1,31 @@
+{
+  "name": "Itaguav3",
+  "short_name": "Itaguav3",
+  "description": "Explora proyectos inmobiliarios con recorridos inmersivos.",
+  "theme_color": "#000000",
+  "background_color": "#DDDDDD",
+  "display": "standalone",
+  "orientation": "landscape",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
