@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,16 +10,15 @@ import FullVideoOverlay from "@/features/project/components/FullVideoOverlay";
 import ProjectLogoIcon from "@/components/icons/ProjectLogoIcon";
 import { getAllFloors } from "@/lib/graphql/mappers";
 
-import { useAssetPreload } from "@/providers/AssetPreloadProvider";
-
 export default function AppHome() {
   const router = useRouter();
   const project = useProjectStore((state) => state.data);
-  const { introVideo, setGlobalVideo, setIsGlobalActive } = useVideoPreloadContext();
-  const { isReady: assetsReady } = useAssetPreload();
-  
+  const { introVideo, introReady, error: videoError, setGlobalVideo, setIsGlobalActive } = useVideoPreloadContext();
+
   const [phase, setPhase] = useState<"LOADING" | "INTRO_VIDEO" | "NAVIGATING">("LOADING");
+  const [imagesReady, setImagesReady] = useState(false);
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
+  const hasStartedPreload = useRef(false);
 
   // 0. TIEMPO MÍNIMO DE PANTALLA (Previene el "flash" si carga muy rápido)
   useEffect(() => {
@@ -29,12 +28,64 @@ export default function AppHome() {
     return () => clearTimeout(minTimer);
   }, []);
 
-  // 1. PORTERO (Sincronización)
+  // 1. CARGA DE IMÁGENES QUE BLOQUEAN LA PANTALLA (logo + planos)
+  // Acotada por tiempo: si no terminan en 6s, se deja pasar igual. Esto es
+  // lo que realmente decide "cuándo puedo avanzar", separado del
+  // precargado pasivo de AssetPreloadProvider (que nadie espera).
   useEffect(() => {
-    if (phase === "LOADING" && minTimeElapsed && assetsReady) {
+    if (!project || hasStartedPreload.current) return;
+    hasStartedPreload.current = true;
+
+    const preloadImages = async () => {
+      try {
+        const allImageUrls: string[] = [];
+
+        if (project.logo?.url) allImageUrls.push(project.logo.url);
+
+        const floors = getAllFloors(project);
+        floors.forEach((f) => {
+          if (f.image?.url) allImageUrls.push(f.image.url);
+        });
+
+        const uniqueUrls = Array.from(new Set(allImageUrls.filter(Boolean)));
+
+        const promises = uniqueUrls.map(
+          (url) =>
+            new Promise<void>((resolve) => {
+              const img = new window.Image();
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+              img.src = url;
+            })
+        );
+
+        // Timeout de seguridad para imágenes (6s): si tardan más, avanzamos igual.
+        const timeout = new Promise<void>((resolve) => setTimeout(resolve, 6000));
+
+        await Promise.race([Promise.allSettled(promises), timeout]);
+        setImagesReady(true);
+      } catch (e) {
+        setImagesReady(true); // Fallback: dejamos pasar
+      }
+    };
+
+    preloadImages();
+  }, [project]);
+
+  // 2. TIMEOUT GLOBAL DE SEGURIDAD (8s)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setImagesReady(true);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 3. PORTERO (Sincronización): tiempo mínimo + imágenes + (video intro listo o con error)
+  useEffect(() => {
+    if (phase === "LOADING" && minTimeElapsed && imagesReady && (introReady || !!videoError)) {
       setPhase("INTRO_VIDEO");
     }
-  }, [assetsReady, phase, minTimeElapsed]);
+  }, [imagesReady, introReady, videoError, phase, minTimeElapsed]);
 
   const handleEnterPlatform = () => {
     // PRE-RESET CRÍTICO
@@ -48,10 +99,10 @@ export default function AppHome() {
       setGlobalVideo(introVideo);
       setIsGlobalActive(true);
     }
-    
+
     setPhase("NAVIGATING");
-    
-    // Le damos un pequeño respiro al DOM (50ms) para pintar el video global 
+
+    // Le damos un pequeño respiro al DOM (50ms) para pintar el video global
     // antes de bloquear el hilo con la navegación dura.
     setTimeout(() => {
       router.push("/project");
@@ -64,7 +115,7 @@ export default function AppHome() {
     <main className="fixed inset-0 w-screen h-dvh overflow-hidden bg-[#443D37] flex items-center justify-center">
       <AnimatePresence>
         {phase === "LOADING" && (
-          <motion.div 
+          <motion.div
             key="loader"
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
