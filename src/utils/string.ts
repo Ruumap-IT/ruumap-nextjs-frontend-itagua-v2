@@ -10,10 +10,13 @@ import type { Unit } from "@/types";
 export const normalizeUnitTitle = (title: string): string => {
   if (!title) return "";
 
+  // 0. Eliminar sufijo " IT" (Itaguav3)
+  let normalized = title.replace(/\s+IT$/i, "").trim();
+
   // 1. Limpiar sufijos PA/PB (Planta Alta / Planta Baja)
   // Encuentra la palabra aislada PA o PB, y borra todo lo que le sigue hasta el final.
   // Ej: "Modelo 1 A PB BR" -> "Modelo 1 A"
-  let normalized = title.replace(/\b(P[AB])\b.*$/i, "").trim();
+  normalized = normalized.replace(/\b(P[AB])\b.*$/i, "").trim();
 
   // 2. Transformar formato "Modelo 1 A" -> "A-P1"
   // Buscamos el patrón "modelo {numero} {letra}"

@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import type { Unit, ProjectData, UnitType } from "@/types";
+import { LogoItagua } from "@/components/icons/LogoItagua";
 import { CloseIcon } from "@/components/icons/CloseIcon";
 import { BrochureIcon } from "@/components/icons/BrochureIcon";
 import { useContactLinks } from "@/hooks/useContactLinks";
@@ -81,6 +82,13 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
     return color?.startsWith("#") ? color : `#${color || "6b7280"}`;
   }, [unit]);
 
+  const availableUnitsCount = useMemo(() => {
+    if (!unitType?.units) return 0;
+    return unitType.units.filter(u => 
+      u.availability_status?.code === "AVAILABLE"
+    ).length;
+  }, [unitType]);
+
   const isVisible = isOpen !== undefined ? isOpen : (!!unit || isModelView);
 
   return (
@@ -122,47 +130,64 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
 
                   <div className="flex flex-col gap-2">
                     <div>
+                      {/* Título Principal: Nombre del Modelo Normalizado */}
                       <h3 className="text-[28px] font-medium text-gray-900 leading-[36px]">
-                        {displayTitle}
+                        {unitType?.title ? unitType.title.replace(/\s+IT$/i, "").trim() : displayTitle}
                       </h3>
-                      {isModelView && unitType?.typology && (
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <span className="text-[15px] font-semibold text-[#22B54E] leading-none">$20.000</span>
-                          <span className="text-gray-400 text-[12px] leading-none self-center">•</span>
-                          <span className="text-[14px] text-gray-500 font-medium leading-none">{unitType.typology}</span>
+                      {isModelView && unitType && (
+                        <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+                          {/* <span className="text-[15px] font-semibold text-[#22B54E] leading-none">$20.000</span> */}
+                          {/* <span className="text-gray-400 text-[12px] leading-none self-center">•</span> */}
+                          {/* <span className="text-[14px] text-gray-500 font-medium leading-none">{unitType.typology}</span> */}
+                          
+                          {/* Contador de unidades disponibles */}
+                          {availableUnitsCount > 0 && (
+                            <>
+                              <span className="text-gray-400 text-[12px] leading-none self-center">•</span>
+                              <span className="text-[14px] font-medium text-[#22B54E] leading-none">
+                                {availableUnitsCount} {availableUnitsCount === 1 ? 'unidad disponible' : 'unidades disponibles'}
+                              </span>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      {!isModelView && unit && (
-                        <>
-                          <div
-                            className="inline-flex items-center gap-2 px-2 h-6 rounded-md text-[12px] font-medium"
-                            style={{
-                              backgroundColor: statusColor,
-                              color: "#ffffff",
-                            }}
-                          >
-                            {unit.availability_status?.icon?.url && (
-                              <AssetImage
-                                src={unit.availability_status.icon.url}
-                                alt={unit.availability_status.label}
-                                className="w-3.5 h-3.5 object-contain"
-                              />
-                            )}
-                            <span>
-                              {unit.availability_status?.label ?? "Estado"}
-                            </span>
-                          </div>
+                    
+                    {!isModelView && unit && (
+                      <div className="flex items-center gap-3">
+                        {/* Título de la unidad ("12L") */}
+                        <span className="text-[14px] text-gray-700 font-medium">
+                          {displayTitle}
+                        </span>
 
-                          {unit.show_price && unit.price && (
-                            <div className="inline-flex items-center px-2 h-6 rounded-md text-[13px] font-semibold bg-gray-100 text-gray-800 border border-gray-200">
-                              <span>{unit.price}</span>
-                            </div>
+                        {/* Badge de Disponibilidad */}
+                        <div
+                          className="inline-flex items-center gap-1.5 px-2.5 h-[26px] rounded-md text-[13px] font-medium"
+                          style={{
+                            backgroundColor: statusColor,
+                            color: "#ffffff",
+                          }}
+                        >
+                          {unit.availability_status?.icon?.url && (
+                            <AssetImage
+                              src={unit.availability_status.icon.url}
+                              alt={unit.availability_status.label}
+                              className="w-[14px] h-[14px] object-contain"
+                            />
                           )}
-                        </>
-                      )}
-                    </div>
+                          <span>
+                            {unit.availability_status?.label ?? "Estado"}
+                          </span>
+                        </div>
+
+                        {/* Precio (oculto pero no borrado según la instrucción) */}
+                        {/* {unit.show_price && unit.price && (
+                          <div className="inline-flex items-center px-2 h-[26px] rounded-md text-[13px] font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                            <span>{unit.price}</span>
+                          </div>
+                        )} */}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -172,7 +197,7 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                       <div className="border-t border-[#CDCDCD] -mx-6"></div>
                       <div className="mt-4">
                         <button
-                          className="w-full h-[44px] rounded-[8px] bg-[#343330] text-white text-[14px] font-medium uppercase hover:opacity-90 transition-opacity"
+                          className="w-full h-[44px] rounded-[8px] bg-[#343330] text-white text-[14px] font-medium hover:opacity-90 transition-opacity"
                           onClick={() => {
                             if (unitType) {
                               const modelSlug = normalizeUnitTitle(unitType.title);
@@ -216,7 +241,7 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
 
                   {(documents.length > 0 || project.brochure?.url) && (
                     <div className="mt-6">
-                      <h4 className="text-[14px] font-semibold text-gray-900 mb-3 uppercase tracking-wider">
+                      <h4 className="text-[14px] font-semibold text-gray-900 mb-3">
                         Brochure
                       </h4>
                       <div className="space-y-3">

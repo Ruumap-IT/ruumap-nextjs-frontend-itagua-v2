@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/*
+ * Variant "fine": aplica solo con puntero de precision (mouse/trackpad de
+ * escritorio). A diferencia de `md:` (que es por ancho de viewport), esto no
+ * se activa en celulares en landscape, que suelen superar los 768px de
+ * ancho y por eso "enganan" al breakpoint `md:` haciendolo pensar que es
+ * escritorio. Usar `fine:` en vez de `md:` para tamanos que deben quedar
+ * chicos en cualquier celular sin importar la orientacion.
+ */
+@custom-variant fine (@media (any-pointer: fine));
+
 @layer base {
   :root {
     /* Color Palette - PV Norte */
@@ -45,7 +55,7 @@
     scrollbar-width: none; /* Firefox */
   }
 
-  /* Animación Óptima para los 3 puntos */
+  /* Animacion Optima para los 3 puntos */
   .animate-dots::after {
     content: "";
     animation: dots 2s steps(4, end) infinite;

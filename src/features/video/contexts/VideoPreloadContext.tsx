@@ -23,9 +23,10 @@ interface VideoPreloadState {
   // Videos preparados
   introVideo: PreparedVideo | null;       // TRANSITION_VIDEO
   floorEntryVideo: PreparedVideo | null;  // TRANSITION_PLANO
+  welcomeVideo: PreparedVideo | null;     // welcome_video (pantalla de entrada, distinto de introVideo)
   forwardVideos: PreparedVideo[];         // V1, V2, V3, V4
   backwardVideos: PreparedVideo[];        // V5, V6, V7, V8 (O correspondencias)
-  
+
   introReady: boolean; // NEW: Granular ready state for intro
   
   // Datos crudos para lógica de BuildingViewer
@@ -107,6 +108,7 @@ export function VideoPreloadProvider({
     error: null,
     introVideo: null,
     floorEntryVideo: null,
+    welcomeVideo: null,
     forwardVideos: [],
     backwardVideos: [],
     forwardFlythroughs: [],
@@ -138,6 +140,28 @@ export function VideoPreloadProvider({
     [introUrl, floorEntryUrl],
     { concurrency: 2, buildUrl }
   );
+
+  // 2b. Preparar el welcome_video (pantalla de entrada) por separado.
+  // Usa preload="metadata": no bloquea nada crítico, y nunca duplica la
+  // descarga que antes hacía FullVideoOverlay.
+  //
+  // NOTA sobre "poster": deliberadamente NO le asignamos un poster con otra
+  // imagen (ej. map_snapshot). Un poster que no es el video real produce el
+  // mismo tipo de salto/interrupción visual que se busca evitar. Mientras
+  // bufferiza, FullVideoOverlay deja ver el fondo de marca (bg-[#443D37]) y
+  // hace un crossfade de opacidad hacia el video cuando está listo — así el
+  // usuario nunca ve contenido que no corresponde a lo que se está cargando.
+  const welcomeUrl = useMemo(() => project?.welcome_video?.url || "", [project]);
+  const { prepared: preparedWelcome } = usePrepareVideos(
+    [welcomeUrl],
+    { concurrency: 1, buildUrl, preloadMode: "metadata" }
+  );
+
+  useEffect(() => {
+    const el = preparedWelcome[0]?.el;
+    if (!el) return;
+    el.loop = true; // es el video de fondo en loop de la pantalla de entrada
+  }, [preparedWelcome]);
 
   // 3. Preparar videos orbitales (si el proyecto ya cargó)
   const directional = useMemo(() => {
@@ -193,6 +217,7 @@ export function VideoPreloadProvider({
       progress: progressTotal,
       introVideo: preparedTransitions[0] || null,
       floorEntryVideo: preparedTransitions[1] || null,
+      welcomeVideo: preparedWelcome[0] || null,
       forwardVideos: finalForward,
       backwardVideos: finalBackward,
       forwardFlythroughs: directional.forward as Flythrough[],
@@ -207,9 +232,10 @@ export function VideoPreloadProvider({
       setIsPreloading(false);
     }
   }, [
-    project, 
-    preparedTransitions, transitionsReady, 
-    preparedForward, forwardReady, 
+    project,
+    preparedTransitions, transitionsReady,
+    preparedWelcome,
+    preparedForward, forwardReady,
     preparedBackward, backwardReady,
     directional, forwardUrls.length, backwardUrls.length
   ]);

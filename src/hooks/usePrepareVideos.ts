@@ -13,6 +13,7 @@ type Options = {
   buildUrl?: (u: string) => string;
   timeoutMs?: number; // per-video timeout
   concurrency?: number; // useful on iOS: 2-3
+  preloadMode?: "auto" | "metadata"; // NEW: control preload behavior
 };
 
 export function usePrepareVideos(sources: string[], opts: Options = {}) {
@@ -21,6 +22,7 @@ export function usePrepareVideos(sources: string[], opts: Options = {}) {
       u.startsWith("http") ? u : `https://cdn.ruumap.com${u}`,
     timeoutMs = 15000,
     concurrency = 3,
+    preloadMode = "auto",
   } = opts;
 
   const [prepared, setPrepared] = useState<PreparedVideo[]>([]);
@@ -43,7 +45,7 @@ export function usePrepareVideos(sources: string[], opts: Options = {}) {
       const el = document.createElement("video");
       el.muted = true; // enables autoplay on mobile
       el.playsInline = true;
-      el.preload = "auto";
+      el.preload = preloadMode;
       
       // La URL se asignará en loadOne tras chequear el cache
       return { el, url: src, ready: false };
@@ -143,7 +145,7 @@ export function usePrepareVideos(sources: string[], opts: Options = {}) {
       blobUrlsRef.current.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sources.join("|")]);
+  }, [sources.join("|"), preloadMode]);
 
   const decodeNext = useCallback(async (index: number) => {
     const item = prepared[index];

@@ -60,8 +60,18 @@ export default function ResidencesContent({
             exit="exit"
             className="absolute inset-0 w-full h-full z-10 bg-black"
           >
+            {/* Sin poster: la galería no garantiza el mismo frame/escena que el
+                video, y un poster que no calza genera el mismo salto visual
+                que se busca evitar. Mejor sin poster que uno incorrecto. */}
             {unitType.video_url ? (
-              <video src={resolvedVideoUrl || unitType.video_url} className="w-full h-full object-cover" autoPlay muted loop controls />
+              <video
+                src={resolvedVideoUrl || unitType.video_url}
+                className="w-full h-full object-cover"
+                autoPlay
+                muted
+                loop
+                controls
+              />
             ) : null}
           </motion.div>
         );

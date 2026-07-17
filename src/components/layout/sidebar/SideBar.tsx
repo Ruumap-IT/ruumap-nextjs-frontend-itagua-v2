@@ -14,6 +14,7 @@ import SidebarFooter from "@/components/layout/sidebar/SidebarFooter";
 import { SidebarIcon } from "@/components/icons/SidebarIcon";
 import { CloseIcon } from "@/components/icons/CloseIcon";
 import { useAssetResolver } from "@/hooks/useAssetResolver";
+import { LogoItagua } from "@/components/icons/LogoItagua";
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
@@ -67,18 +68,7 @@ export default function Sidebar() {
                     <CloseIcon className="w-6 h-6 text-gray-600" />
                   </button>
                   <div className="flex items-center justify-center">
-                    {project.logo?.url && (
-                        <div className="relative w-[64px] h-[120px] lg:w-[86px] lg:h-[160px]">
-                            <Image
-                                src={resolvedLogo || project.logo.url}
-                                alt={project.title}
-                                fill
-                                unoptimized={true}
-                                className="object-contain"
-                                style={{ filter: 'brightness(0)' }}
-                            />
-                        </div>
-                    )}
+                    <LogoItagua className="w-32 h-auto" />
                   </div>
                 </div>
 

@@ -1,5 +1,5 @@
 // src/features/project/components/FullVideoOverlay.tsx
-import React, { useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { ProjectData } from "@/types";
@@ -7,6 +7,8 @@ import { useFullscreenToggle } from "@/hooks/useFullscreenToggle";
 import CircularIconButton from "@/components/ui/CircularIconButton";
 import { ExpandIcon } from "@/components/icons/ExpandIcon";
 import { useAssetResolver } from "@/hooks/useAssetResolver";
+import { useVideoPreloadContext } from "@/features/video/contexts/VideoPreloadContext";
+import AdoptedVideo from "@/features/video/components/AdoptedVideo";
 
 interface Props {
   project: ProjectData;
@@ -14,51 +16,63 @@ interface Props {
 }
 
 export default function FullVideoOverlay({ project, onEnter }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  
+
   const { supportsFullscreen, toggle } = useFullscreenToggle();
+  const { welcomeVideo } = useVideoPreloadContext();
 
-  //const resolvedBanner = useAssetResolver(project.map_snapshot?.url);
   const resolvedLogo = useAssetResolver(project.logo?.url);
-  const resolvedVideo = useAssetResolver(project.welcome_video?.url);
 
-  const handleVideoCanPlay = () => {
-    setIsVideoPlaying(true);
-  };
+  // El <video> real ya viene precargado desde VideoPreloadContext — acá solo lo
+  // "adoptamos" en el DOM, cero descarga duplicada. Mientras no esté listo, se
+  // mantiene invisible y se ve el fondo de marca (bg-[#443D37] del contenedor
+  // padre en AppHome) en vez de un poster con contenido que no corresponde.
+  useEffect(() => {
+    const el = welcomeVideo?.el;
+    if (!el) return;
+
+    // Si ya tiene datos suficientes (por ejemplo, vuelta a esta pantalla), mostramos ya.
+    if (el.readyState >= 2) {
+      setIsVideoPlaying(true);
+    }
+
+    const handleReady = () => setIsVideoPlaying(true);
+    el.addEventListener("canplay", handleReady);
+    el.addEventListener("playing", handleReady);
+
+    // Red de seguridad: no bloquear la UI si el video tarda o falla.
+    const fallback = window.setTimeout(() => setIsVideoPlaying(true), 4000);
+
+    return () => {
+      el.removeEventListener("canplay", handleReady);
+      el.removeEventListener("playing", handleReady);
+      window.clearTimeout(fallback);
+    };
+  }, [welcomeVideo]);
 
   return (
     <div className="relative w-full h-full bg-transparent">
-      {/* 
-        EL VIDEO DE FONDO 
-        Se mantiene tal como en el original, usando la URL que viene de Strapi
+      {/*
+        EL VIDEO DE FONDO
+        Elemento real y pre-bufferizado, adoptado desde VideoPreloadContext.
+        Empieza en opacity-0 y hace crossfade hacia el video en cuanto está
+        listo (isVideoPlaying), en vez de mostrar un poster con otra escena.
+        Antes de eso, se ve el fondo de marca del contenedor padre.
       */}
-      {resolvedVideo && (
-        <video
-          ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          onCanPlay={handleVideoCanPlay}
+      {welcomeVideo?.el && (
+        <div
+          className={`absolute inset-0 w-full h-full transition-opacity duration-500 ${
+            isVideoPlaying ? "opacity-100" : "opacity-0"
+          }`}
         >
-          <source src={resolvedVideo} type="video/mp4" />
-        </video>
-)}
-      {/* {project.welcome_video?.url && (
-        <
-        <Image
-          src={resolvedBanner || project.welcome_video.url}
-          alt="Background"
-          fill
-          priority
-          unoptimized={true}
-          className="object-cover"
-          onLoad={() => setIsVideoPlaying(true)}
-        />
-      )} */}
+          <AdoptedVideo
+            el={welcomeVideo.el}
+            active={true}
+            play={true}
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
 
       {/* OVERLAY: Fondo negro al 60% de opacidad */}
       <div className="absolute inset-0 z-10 bg-black/60" />

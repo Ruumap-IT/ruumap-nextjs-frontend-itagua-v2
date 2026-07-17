@@ -6,7 +6,7 @@ import { useProjectStore } from "@/store/useProjectStore";
 import { useContactLinks } from "@/hooks/useContactLinks";
 import { CloseIcon } from "@/components/icons/CloseIcon";
 import { useAssetResolver } from "@/hooks/useAssetResolver";
-
+import { LogoItagua } from "@/components/icons/LogoItagua";
 import { AssetImage } from "@/components/ui/AssetImage";
 import { normalizeUnitTitle } from "@/utils/string";
 
@@ -79,18 +79,9 @@ export default function LocationSidebar({ isOpen, onClose }: LocationSidebarProp
             {/* Header / Logo Section */}
             <div className="relative px-6 pt-12 pb-5">
               <div className="flex flex-col gap-3">
-                {project.logo?.url && (
-                  <div className="relative w-30 h-50 mb-8 mt-5 mx-auto">
-                    <Image
-                      src={resolvedLogo || project.logo.url}
-                      alt="Logo"
-                      fill
-                      unoptimized={true}
-                      className="object-contain"
-                      style={{ filter: 'brightness(0)' }}
-                    />
-                  </div>
-                )}
+                <div className="flex justify-center mb-8 mt-5">
+                  <LogoItagua className="w-32 h-auto" />
+                </div>
                 <h3 className="text-[22px] font-bold text-gray-900">{project.subdomain || project.title}</h3>
                 {project.address && (
                   <div className="text-lg font-bold text-gray-900">{project.address}</div>

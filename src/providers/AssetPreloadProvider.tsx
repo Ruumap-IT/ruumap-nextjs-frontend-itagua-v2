@@ -38,6 +38,15 @@ export default function AssetPreloadProvider({ children }: { children: React.Rea
     const controller = new AbortController();
     const signal = controller.signal;
 
+    // BREAKER GLOBAL DE SEGURIDAD (8s): ninguna promesa de red debería poder
+    // colgar la interfaz indefinidamente. Si a los 8s la precarga crítica
+    // todavía no resolvió (red lenta, evento que nunca dispara, etc.),
+    // forzamos isReady = true igual para no dejar al usuario atrapado.
+    const safetyBreaker = window.setTimeout(() => {
+      console.warn("[AssetPreloadProvider] Timeout de seguridad (8s) alcanzado, forzando isReady.");
+      setIsReady(true);
+    }, 8000);
+
     const runPreload = async () => {
       // 1. Clasificación de Assets en tareas tipadas (AssetTask)
       const tasks: AssetTask[] = [];
@@ -59,14 +68,9 @@ export default function AssetPreloadProvider({ children }: { children: React.Rea
           preload: "auto"
         });
       }
-      if (project.welcome_video?.url) {
-        tasks.push({
-          url: project.welcome_video.url,
-          type: "video",
-          priority: AssetPriority.Critical,
-          preload: "auto"
-        });
-      }
+      // NOTA: welcome_video ya NO se precarga acá. Se movió a VideoPreloadContext
+      // (patrón usePrepareVideos + AdoptedVideo) para evitar la doble descarga
+      // que causaba el cuelgue en iOS Safari. Ver FullVideoOverlow.tsx.
 
       // -- B. Assets Secundarios (Banner de contacto demotado, planos, galerías)
       if (project.contact_banner?.url) {
@@ -146,6 +150,7 @@ export default function AssetPreloadProvider({ children }: { children: React.Rea
         if (signal.aborted) return;
 
         // Marcar listos los recursos críticos y permitir render
+        window.clearTimeout(safetyBreaker);
         setIsReady(true);
         console.log("✅ Assets críticos precargados con éxito");
 
@@ -172,6 +177,7 @@ export default function AssetPreloadProvider({ children }: { children: React.Rea
       } catch (e) {
         console.error("Error during asset preloading:", e);
         // Fallback: marcamos como listo de todos modos para que el usuario no quede bloqueado
+        window.clearTimeout(safetyBreaker);
         if (!signal.aborted) {
           setIsReady(true);
         }
@@ -182,6 +188,7 @@ export default function AssetPreloadProvider({ children }: { children: React.Rea
 
     return () => {
       controller.abort();
+      window.clearTimeout(safetyBreaker);
     };
   }, [project]);
 

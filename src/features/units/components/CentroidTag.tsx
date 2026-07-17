@@ -14,7 +14,7 @@ interface CentroidTagProps {
 
 /**
  * CentroidTag - Una etiqueta interactiva que se posiciona en el centro del departamento.
- * Sigue la estética premium: Glassmorphism, bordes suaves y feedback visual claro.
+ * Sigue la estetica premium: Glassmorphism, bordes suaves y feedback visual claro.
  */
 export const CentroidTag: React.FC<CentroidTagProps> = ({ 
   unit, 
@@ -42,31 +42,34 @@ export const CentroidTag: React.FC<CentroidTagProps> = ({
       onMouseEnter={() => onHover(unit)}
       onMouseLeave={() => onHover(null)}
     >
-      <div 
+      <div
         className={`
           relative flex items-center justify-center
-          w-fit min-w-[46px] max-w-fit h-[24px] px-[8px] rounded-[6px]
+          w-fit min-w-[28px] fine:min-w-[46px] max-w-fit
+          h-[16px] fine:h-[24px]
+          px-[4px] fine:px-[8px]
+          rounded-[3px] fine:rounded-[6px]
           shadow-lg transform transition-all duration-300
           active:scale-95
           ${isSelected && !isSpecialTag ? 'ring-2 ring-white/50 bg-[#353432]' : ''}
-          ${isSpecialTag 
-              ? 'border-transparent text-black bg-white hover:bg-gray-200 hover:scale-105' 
-              : 'bg-[#252422] border-[1.5px] border-[#FFFFFF] group-hover:bg-[#FFFFFF] group-hover:border-[#252422]'
+          ${isSpecialTag
+              ? 'border-transparent text-black bg-white hover:bg-gray-200 hover:scale-105'
+              : 'bg-[#252422] border-[1px] fine:border-[1.5px] border-[#FFFFFF] group-hover:bg-[#FFFFFF] group-hover:border-[#252422]'
           }
         `}
       >
         {/* Indicador de estado al lado izquierdo (Oculto para especiales) */}
         {!isSpecialTag && (
-          <div 
-            className="w-[10px] h-[10px] rounded-full shrink-0 border border-white/20 transition-colors mr-[4px]" 
+          <div
+            className="w-[6px] h-[6px] fine:w-[10px] fine:h-[10px] rounded-full shrink-0 border border-white/20 transition-colors mr-[2px] fine:mr-[4px]"
             style={{ backgroundColor: statusColor }}
           />
         )}
-        
-        {/* Número/Título del Depto Filtrado */}
-        <span 
+
+        {/* Numero/Titulo del Depto Filtrado */}
+        <span
           className={`
-            text-[12px] font-semibold tracking-normal truncate
+            text-[8px] fine:text-[12px] font-semibold tracking-normal truncate
             ${isSpecialTag ? 'text-black' : 'text-white transition-colors duration-300 group-hover:text-[#252422]'}
           `}
         >
