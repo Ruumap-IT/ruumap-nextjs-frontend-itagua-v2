@@ -35,6 +35,14 @@ interface Props extends React.ImgHTMLAttributes<HTMLImageElement> {
  * Incluye onError como red de seguridad: si la imagen falla, igual se
  * revela (antes se quedaba invisible para siempre, el mismo patron de
  * "promesa sin timeout" que encontramos en el resto del proyecto).
+ *
+ * key={finalSrc}: al cambiar de piso (o de cualquier imagen), forzamos que
+ * React monte un <img> NUEVO en vez de reciclar el existente y reasignarle
+ * src. Reasignar src sobre un <img> ya montado siempre dispara un ciclo
+ * de carga (incluso si esta en cache), haciendo que complete sea false
+ * por un instante y se repita el fade en cada cambio. Un elemento recien
+ * montado con una URL cacheada SI puede reportar complete: true de forma
+ * instantanea, el mismo truco que ya usa ZoomableImage en su galeria.
  */
 export function AssetImage({ src, alt, className = "", style, ...props }: Props) {
   const resolvedSrc = useAssetResolver(src);
@@ -66,6 +74,7 @@ export function AssetImage({ src, alt, className = "", style, ...props }: Props)
 
   return (
     <img
+      key={finalSrc}
       ref={imgRef}
       src={finalSrc}
       alt={alt}

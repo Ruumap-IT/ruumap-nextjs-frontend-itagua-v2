@@ -1,28 +1,44 @@
-export enum AssetPriority {
-  Critical,
-  Secondary
-}
+export type AssetPriority = "high" | "low";
 
 export interface AssetTask {
   url: string;
-  type: "image" | "video";
   priority: AssetPriority;
-  preload: "metadata" | "auto";
 }
 
 /**
- * Programmatic preloader for images using the browser's native Image decoding API.
- * Supports early abort via AbortSignal.
+ * Precargador programatico de imagenes usando la API nativa de decode del
+ * navegador.
+ *
+ * Usa `fetchPriority` (propiedad IDL soportada en navegadores modernos
+ * basados en Chromium y, cada vez mas, en Safari) para darle al navegador
+ * una senal REAL de prioridad de red, en vez de imponer un limite de
+ * concurrencia artificial armado a mano en el codigo. Es el propio
+ * navegador el que decide como repartir el ancho de banda frente a otras
+ * descargas en vuelo (por ejemplo, los videos orbitales que se precargan
+ * en paralelo desde VideoPreloadContext) — eso lo hace mejor que cualquier
+ * pool fijo que nosotros podamos armar.
+ *
+ * Soporta cancelacion temprana via AbortSignal.
  */
-export function preloadImage(src: string, signal?: AbortSignal): Promise<void> {
+export function preloadImage(
+  src: string,
+  signal?: AbortSignal,
+  priority: AssetPriority = "low"
+): Promise<void> {
   if (typeof window === "undefined" || !src) return Promise.resolve();
   if (signal?.aborted) return Promise.resolve();
 
   return new Promise((resolve) => {
     const img = new window.Image();
-    
+
+    // fetchPriority es relativamente nueva; algunos navegadores o versiones
+    // de TypeScript todavia no la tienen tipada, de ahi el chequeo/cast.
+    if ("fetchPriority" in img) {
+      (img as unknown as { fetchPriority: string }).fetchPriority = priority;
+    }
+
     const handleAbort = () => {
-      img.src = ""; // Stop the image download
+      img.src = ""; // Cancela la descarga
       resolve();
     };
 
@@ -46,7 +62,7 @@ export function preloadImage(src: string, signal?: AbortSignal): Promise<void> {
           await img.decode();
         }
       } catch (e) {
-        // Safe fallback for browsers rejecting decode() or unsupported formats
+        // Fallback seguro para navegadores que rechazan decode() o formatos no soportados
       }
       resolve();
     };
@@ -55,82 +71,7 @@ export function preloadImage(src: string, signal?: AbortSignal): Promise<void> {
       if (signal) {
         signal.removeEventListener("abort", handleAbort);
       }
-      resolve(); // Resolve to avoid blocking the queue
+      resolve(); // Resolvemos igual para no bloquear el resto de la cola
     };
   });
-}
-
-/**
- * Programmatic preloader for videos using a headless video element.
- * Supports loading only metadata or auto-buffering, and abort cancellation.
- */
-export function preloadVideo(
-  src: string,
-  preloadMode: "metadata" | "auto" = "metadata",
-  signal?: AbortSignal
-): Promise<void> {
-  if (typeof window === "undefined" || !src) return Promise.resolve();
-  if (signal?.aborted) return Promise.resolve();
-
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    
-    const handleAbort = () => {
-      video.src = ""; // Cancel load
-      video.load();
-      resolve();
-    };
-
-    if (signal) {
-      signal.addEventListener("abort", handleAbort);
-    }
-
-    video.preload = preloadMode;
-    video.muted = true;
-    video.playsInline = true;
-    video.src = src;
-
-    video.onloadeddata = () => {
-      if (signal) {
-        signal.removeEventListener("abort", handleAbort);
-      }
-      resolve();
-    };
-
-    video.onerror = () => {
-      if (signal) {
-        signal.removeEventListener("abort", handleAbort);
-      }
-      resolve(); // Resolve to avoid blocking the queue
-    };
-  });
-}
-
-/**
- * Executes async tasks in a sliding-window concurrency pool, supporting task cancellation.
- */
-export async function preloadBatch<T>(
-  items: T[],
-  fn: (item: T, signal?: AbortSignal) => Promise<void>,
-  limit: number,
-  signal?: AbortSignal
-): Promise<void> {
-  if (!items.length || signal?.aborted) return;
-  
-  const executing = new Set<Promise<void>>();
-  
-  for (const item of items) {
-    if (signal?.aborted) break;
-
-    const p = Promise.resolve().then(() => fn(item, signal));
-    executing.add(p);
-    const clean = () => executing.delete(p);
-    p.then(clean, clean);
-    
-    if (executing.size >= limit) {
-      await Promise.race(executing);
-    }
-  }
-  
-  await Promise.all(executing);
 }

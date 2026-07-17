@@ -5,13 +5,7 @@ import { useProjectStore } from "@/store/useProjectStore";
 import { getAllFloors } from "@/lib/graphql/mappers";
 import { normalizeUnitTitle } from "@/utils/string";
 import { resolveAsset } from "@/hooks/useAssetResolver";
-import {
-  AssetPriority,
-  AssetTask,
-  preloadImage,
-  preloadVideo,
-  preloadBatch
-} from "@/utils/assetPreloader";
+import { AssetTask, preloadImage } from "@/utils/assetPreloader";
 
 interface AssetPreloadContextType {
   isReady: boolean;
@@ -24,9 +18,28 @@ export function useAssetPreload() {
 }
 
 /**
- * AssetPreloadProvider - Se encarga de precargar recursos de forma programática.
- * Divide los recursos en Críticos y Secundarios, controlando la concurrencia
- * y decodificando imágenes para optimizar rendimiento de la GPU y soporte Offline.
+ * AssetPreloadProvider - precarga programatica de imagenes usando prioridad
+ * de red real del navegador (fetchPriority), en vez de fases secuenciales o
+ * limites de concurrencia artificiales.
+ *
+ * ANTES: se hacia un `await` a que termine un grupo "Critico" antes de
+ * siquiera empezar el grupo "Secundario" (planos de piso), y ademas ese
+ * segundo grupo estaba limitado a 4 descargas simultaneas con un pool
+ * armado a mano. Eso le restaba tiempo real a los planos de piso frente a
+ * los videos orbitales, que arrancan su propia descarga pesada desde el
+ * mismo instante y no esperan a nadie.
+ *
+ * AHORA: todo se dispara en paralelo desde el arranque, diferenciado solo
+ * por una senal de prioridad (`fetchPriority: "high" | "low"`) que el
+ * propio navegador respeta al repartir ancho de banda frente a cualquier
+ * otra descarga en vuelo. `isReady` se marca en cuanto el grupo de alta
+ * prioridad resuelve, sin esperar al resto (que sigue bajando en
+ * background, sin bloquear nada).
+ *
+ * El plano de piso POR DEFECTO (el primero que el usuario ve al entrar a
+ * floor-plans) va en alta prioridad junto al logo y el mapa. Los demas
+ * pisos quedan en baja prioridad real: van a bajar igual, pero sin
+ * competirle al primero ni a los videos criticos de la intro.
  */
 export default function AssetPreloadProvider({ children }: { children: React.ReactNode }) {
   const project = useProjectStore((state) => state.data);
@@ -38,145 +51,99 @@ export default function AssetPreloadProvider({ children }: { children: React.Rea
     const controller = new AbortController();
     const signal = controller.signal;
 
-    // BREAKER GLOBAL DE SEGURIDAD (8s): ninguna promesa de red debería poder
-    // colgar la interfaz indefinidamente. Si a los 8s la precarga crítica
-    // todavía no resolvió (red lenta, evento que nunca dispara, etc.),
-    // forzamos isReady = true igual para no dejar al usuario atrapado.
+    // BREAKER GLOBAL DE SEGURIDAD (8s): ninguna promesa de red deberia poder
+    // colgar la interfaz indefinidamente.
     const safetyBreaker = window.setTimeout(() => {
       console.warn("[AssetPreloadProvider] Timeout de seguridad (8s) alcanzado, forzando isReady.");
       setIsReady(true);
     }, 8000);
 
     const runPreload = async () => {
-      // 1. Clasificación de Assets en tareas tipadas (AssetTask)
       const tasks: AssetTask[] = [];
 
-      // -- A. Assets Críticos (Logo, welcome video y mapa estático de fondo)
+      // -- Alta prioridad: lo que hace falta ver de inmediato --
       if (project.logo?.url) {
-        tasks.push({
-          url: project.logo.url,
-          type: "image",
-          priority: AssetPriority.Critical,
-          preload: "auto"
-        });
+        tasks.push({ url: project.logo.url, priority: "high" });
       }
       if (project.map_snapshot?.url) {
-        tasks.push({
-          url: project.map_snapshot.url,
-          type: "image",
-          priority: AssetPriority.Critical,
-          preload: "auto"
-        });
-      }
-      // NOTA: welcome_video ya NO se precarga acá. Se movió a VideoPreloadContext
-      // (patrón usePrepareVideos + AdoptedVideo) para evitar la doble descarga
-      // que causaba el cuelgue en iOS Safari. Ver FullVideoOverlow.tsx.
-
-      // -- B. Assets Secundarios (Banner de contacto demotado, planos, galerías)
-      if (project.contact_banner?.url) {
-        tasks.push({
-          url: project.contact_banner.url,
-          type: "image",
-          priority: AssetPriority.Secondary,
-          preload: "auto"
-        });
+        tasks.push({ url: project.map_snapshot.url, priority: "high" });
       }
 
+      let floors: ReturnType<typeof getAllFloors> = [];
       try {
-        const floors = getAllFloors(project);
-        floors.forEach(f => {
-          if (f.image?.url) {
-            tasks.push({
-              url: f.image.url,
-              type: "image",
-              priority: AssetPriority.Secondary,
-              preload: "auto"
-            });
-          }
-        });
+        floors = getAllFloors(project);
       } catch {}
 
-      const amenities = project.unit_types.find(ut => normalizeUnitTitle(ut.title).toUpperCase() === "AMENITIES");
-      if (amenities && amenities.gallery && amenities.gallery.length > 0) {
-        tasks.push({
-          url: amenities.gallery[0].url,
-          type: "image",
-          priority: AssetPriority.Secondary,
-          preload: "auto"
-        });
+      floors.forEach((f, index) => {
+        if (f.image?.url) {
+          // Solo el primer piso (el que el usuario ve de entrada) va en alta
+          // prioridad. El resto es real que haga falta, pero no con la
+          // misma urgencia.
+          tasks.push({ url: f.image.url, priority: index === 0 ? "high" : "low" });
+        }
+      });
+
+      // -- Baja prioridad: utiles pero no urgentes --
+      if (project.contact_banner?.url) {
+        tasks.push({ url: project.contact_banner.url, priority: "low" });
       }
 
-      const models = project.unit_types.filter(ut => normalizeUnitTitle(ut.title).toUpperCase() !== "AMENITIES");
+      const amenities = project.unit_types.find(
+        (ut) => normalizeUnitTitle(ut.title).toUpperCase() === "AMENITIES"
+      );
+      if (amenities && amenities.gallery && amenities.gallery.length > 0) {
+        tasks.push({ url: amenities.gallery[0].url, priority: "low" });
+      }
+
+      const models = project.unit_types.filter(
+        (ut) => normalizeUnitTitle(ut.title).toUpperCase() !== "AMENITIES"
+      );
       const seenTitles = new Set<string>();
-      models.forEach(m => {
+      models.forEach((m) => {
         const base = normalizeUnitTitle(m.title);
         if (!seenTitles.has(base)) {
           seenTitles.add(base);
           if (m.gallery && m.gallery.length > 0) {
-            tasks.push({
-              url: m.gallery[0].url,
-              type: "image",
-              priority: AssetPriority.Secondary,
-              preload: "auto"
-            });
+            tasks.push({ url: m.gallery[0].url, priority: "low" });
           }
         }
       });
 
-      // Filtrar tareas críticas y secundarias
-      const criticalTasks = tasks.filter(t => t.priority === AssetPriority.Critical && t.url);
-      const secondaryTasks = tasks.filter(t => t.priority === AssetPriority.Secondary && t.url);
-
       try {
-        // 2. ORQUESTACIÓN DE PRECADO CRÍTICO
-        const resolvedCriticalTasks = await Promise.all(
-          criticalTasks.map(async task => ({
-            ...task,
-            url: await resolveAsset(task.url)
-          }))
+        // Resolver URLs. El caso online ahora es sincronico (fix en
+        // useAssetResolver/resolveAsset), asi que esto es practicamente
+        // instantaneo salvo que el usuario este offline.
+        const resolvedTasks = await Promise.all(
+          tasks.map(async (t) => ({ ...t, url: await resolveAsset(t.url) }))
         );
 
         if (signal.aborted) return;
 
-        const criticalImages = resolvedCriticalTasks.filter(t => t.type === "image");
-        const criticalVideos = resolvedCriticalTasks.filter(t => t.type === "video");
+        const highTasks = resolvedTasks.filter((t) => t.priority === "high" && t.url);
+        const lowTasks = resolvedTasks.filter((t) => t.priority === "low" && t.url);
 
-        // Ejecutar descargas críticas con límite de concurrencia de 4 y soporte de cancelación
-        await Promise.all([
-          preloadBatch(criticalImages, (t, sig) => preloadImage(t.url, sig), 4, signal),
-          preloadBatch(criticalVideos, (t, sig) => preloadVideo(t.url, t.preload, sig), 4, signal)
-        ]);
-
-        if (signal.aborted) return;
-
-        // Marcar listos los recursos críticos y permitir render
-        window.clearTimeout(safetyBreaker);
-        setIsReady(true);
-        console.log("✅ Assets críticos precargados con éxito");
-
-        // 3. ORQUESTACIÓN DE PRECADO SECUNDARIO (Asíncrono, no bloqueante)
-        const resolvedSecondaryTasks = await Promise.all(
-          secondaryTasks.map(async task => ({
-            ...task,
-            url: await resolveAsset(task.url)
-          }))
+        // Disparamos AMBOS grupos en paralelo, sin que uno espere al otro.
+        // La prioridad real la resuelve fetchPriority en el navegador.
+        const highPromise = Promise.all(
+          highTasks.map((t) => preloadImage(t.url, signal, "high"))
+        );
+        const lowPromise = Promise.all(
+          lowTasks.map((t) => preloadImage(t.url, signal, "low"))
         );
 
-        if (signal.aborted) return;
+        await highPromise;
+        if (!signal.aborted) {
+          window.clearTimeout(safetyBreaker);
+          setIsReady(true);
+          console.log("✅ Assets de alta prioridad listos");
+        }
 
-        const secondaryImages = resolvedSecondaryTasks.filter(t => t.type === "image");
-        const secondaryVideos = resolvedSecondaryTasks.filter(t => t.type === "video");
-
-        // Ejecutar descargas secundarias con límite de concurrencia de 4 y soporte de cancelación
-        await Promise.all([
-          preloadBatch(secondaryImages, (t, sig) => preloadImage(t.url, sig), 4, signal),
-          preloadBatch(secondaryVideos, (t, sig) => preloadVideo(t.url, t.preload, sig), 4, signal)
-        ]);
-
-        console.log("✅ Assets secundarios precargados en segundo plano");
+        await lowPromise;
+        if (!signal.aborted) {
+          console.log("✅ Assets de baja prioridad listos (en paralelo, sin bloquear nada)");
+        }
       } catch (e) {
         console.error("Error during asset preloading:", e);
-        // Fallback: marcamos como listo de todos modos para que el usuario no quede bloqueado
         window.clearTimeout(safetyBreaker);
         if (!signal.aborted) {
           setIsReady(true);
