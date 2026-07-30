@@ -73,6 +73,8 @@ export const GET_PROJECT_DATA = `
           shape
           shape_viewbox
           centroid_point
+          price
+          show_price
           floor {
             title
             level

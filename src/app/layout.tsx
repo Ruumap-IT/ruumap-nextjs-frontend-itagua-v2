@@ -20,12 +20,35 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Itaguav3",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://itagua.ruumap.com"),
+  title: "Itagua",
   description: "Explora proyectos inmobiliarios con recorridos inmersivos.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
+  },
+  openGraph: {
+    title: "Itagua",
+    description: "Explora proyectos inmobiliarios con recorridos inmersivos.",
+    url: "https://itagua.ruumap.com", // Puedes actualizar este dominio luego si es necesario
+    siteName: "Itagua",
+    images: [
+      {
+        url: "/images/metadata_itagua.png",
+        width: 1200,
+        height: 630,
+        alt: "Itagua - Exploración inmersiva",
+      },
+    ],
+    locale: "es_ES",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Itagua",
+    description: "Explora proyectos inmobiliarios con recorridos inmersivos.",
+    images: ["/images/metadata_itagua.png"],
   },
   icons: {
     icon: [

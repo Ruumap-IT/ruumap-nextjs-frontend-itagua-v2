@@ -90,9 +90,14 @@ export const mapShapeViewbox = (viewbox: any): ShapeViewbox => ({
 });
 
 export const mapUnit = (unit: any): Unit => {
-  // Simulando precios aleatorios y visibilidad si no vienen de la API
-  const mockPrice = unit?.price || `$${(Math.random() * 100000 + 100000).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-  const mockShowPrice = unit?.show_price !== undefined ? unit.show_price : Math.random() > 0.3; // 70% chance to show price
+  // Formateando el precio en caso de que venga como número
+  const formatPrice = (price: any) => {
+    if (!price) return undefined;
+    if (typeof price === 'number') {
+      return `$${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    }
+    return String(price);
+  };
 
   return {
     title: unit?.title || "",
@@ -101,8 +106,8 @@ export const mapUnit = (unit: any): Unit => {
     shape_viewbox: mapShapeViewbox(unit?.shape_viewbox),
     centroid_point: mapCentroidPoint(unit?.centroid_point),
     floor: mapFloor(unit?.floor),
-    price: mockPrice,
-    show_price: mockShowPrice,
+    price: formatPrice(unit?.price),
+    show_price: unit?.show_price,
   };
 };
 

@@ -180,12 +180,12 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                           </span>
                         </div>
 
-                        {/* Precio (oculto pero no borrado según la instrucción) */}
-                        {/* {unit.show_price && unit.price && (
+                        {/* Precio */}
+                        {unit.show_price && unit.price && (
                           <div className="inline-flex items-center px-2 h-[26px] rounded-md text-[13px] font-semibold bg-gray-100 text-gray-800 border border-gray-200">
                             <span>{unit.price}</span>
                           </div>
-                        )} */}
+                        )}
                       </div>
                     )}
                   </div>
