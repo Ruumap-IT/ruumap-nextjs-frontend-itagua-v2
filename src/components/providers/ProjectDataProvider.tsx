@@ -32,6 +32,20 @@ export const ProjectDataProvider = ({ children, initialData }: Props) => {
       };
       initData();
     }
+
+    // Polling para actualizaciones en tiempo real (cada 15 segundos)
+    const POLLING_INTERVAL = 10000;
+    const intervalId = setInterval(async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return; // No hacer polling si no hay internet
+      try {
+        const newData = await getProjectData();
+        useProjectStore.getState().setProjectData(newData);
+      } catch (err) {
+        console.warn("[Polling] Error al buscar actualizaciones:", err);
+      }
+    }, POLLING_INTERVAL);
+
+    return () => clearInterval(intervalId);
   }, [initialData, data, setError, setLoading]);
 
   const project = data || initialData;
