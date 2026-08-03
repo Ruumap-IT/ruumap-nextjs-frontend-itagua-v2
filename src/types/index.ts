@@ -95,6 +95,7 @@ export interface UnitType {
   vr_url: string | null;
   category: string;
   typology?: string;
+  price?: string;
 }
 
 // Interfaces para partner/socio

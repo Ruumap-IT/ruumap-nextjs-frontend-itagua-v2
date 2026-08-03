@@ -89,16 +89,24 @@ export const mapShapeViewbox = (viewbox: any): ShapeViewbox => ({
   viewbox: viewbox?.viewbox || "0 0 100 100",
 });
 
-export const mapUnit = (unit: any): Unit => {
-  // Formateando el precio en caso de que venga como número
-  const formatPrice = (price: any) => {
-    if (!price) return undefined;
-    if (typeof price === 'number') {
-      return `$${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-    }
-    return String(price);
-  };
+// Strapi puede entregar el Decimal de precio como number o como string
+// según el contexto — normalizamos a number antes de cualquier formateo o
+// comparación (comparar/derivar mínimos sobre strings ya formateados sería
+// incorrecto: "9.000" > "10.000" como string aunque 9000 < 10000).
+const parseRawPrice = (price: any): number | undefined => {
+  if (price === null || price === undefined) return undefined;
+  const num = typeof price === "number" ? price : parseFloat(price);
+  return Number.isFinite(num) ? num : undefined;
+};
 
+// Sin "$", separador de miles con punto (formato "150.000"). El sufijo
+// "US." se agrega en el JSX del sidebar, no acá, para poder estilarlo aparte.
+const formatPrice = (price: number | undefined): string | undefined => {
+  if (price === undefined) return undefined;
+  return price.toLocaleString("en-US", { maximumFractionDigits: 0 });
+};
+
+export const mapUnit = (unit: any): Unit => {
   return {
     title: unit?.title || "",
     availability_status: mapAvailabilityStatus(unit?.availability_status),
@@ -106,7 +114,7 @@ export const mapUnit = (unit: any): Unit => {
     shape_viewbox: mapShapeViewbox(unit?.shape_viewbox),
     centroid_point: mapCentroidPoint(unit?.centroid_point),
     floor: mapFloor(unit?.floor),
-    price: formatPrice(unit?.price),
+    price: formatPrice(parseRawPrice(unit?.price)),
   };
 };
 
@@ -126,6 +134,13 @@ export const mapUnitType = (unitType: any): UnitType => {
     else mockTypology = "Estudio";
   }
 
+  // Precio "desde" del modelo: el mínimo entre las unidades, calculado
+  // sobre números crudos (no sobre los strings ya formateados de `units`).
+  const rawPrices = (unitType?.units || [])
+    .map((u: any) => parseRawPrice(u?.price))
+    .filter((p: number | undefined): p is number => p !== undefined);
+  const minPrice = rawPrices.length > 0 ? formatPrice(Math.min(...rawPrices)) : undefined;
+
   return {
     title: unitType?.title || "",
     features: (unitType?.features || []).map(mapFeature),
@@ -140,6 +155,7 @@ export const mapUnitType = (unitType: any): UnitType => {
     vr_url: unitType?.vr_url || null,
     category: unitType?.category || "",
     typology: mockTypology,
+    price: minPrice,
   };
 };
 

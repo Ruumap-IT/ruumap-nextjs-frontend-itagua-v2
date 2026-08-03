@@ -84,10 +84,16 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
 
   const availableUnitsCount = useMemo(() => {
     if (!unitType?.units) return 0;
-    return unitType.units.filter(u => 
+    return unitType.units.filter(u =>
       u.availability_status?.code === "AVAILABLE"
     ).length;
   }, [unitType]);
+
+  // Precio a mostrar: el de la unidad puntual en modo unidad, o el mínimo
+  // entre las unidades del modelo ("desde") en modo modelo.
+  const priceValue = useMemo(() => {
+    return isModelView ? unitType?.price : unit?.price;
+  }, [isModelView, unitType, unit]);
 
   const isVisible = isOpen !== undefined ? isOpen : (!!unit || isModelView);
 
@@ -128,38 +134,34 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                     <CloseIcon className="w-5 h-5 text-gray-900" />
                   </button>
 
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-4">
                     <div>
                       {/* Título Principal: Nombre del Modelo Normalizado */}
                       <h3 className="text-[28px] font-medium text-gray-900 leading-[36px]">
                         {unitType?.title ? unitType.title.replace(/\s+IT$/i, "").trim() : displayTitle}
                       </h3>
-                      {isModelView && unitType && (
-                        <div className="flex items-baseline gap-2 mt-1 flex-wrap">
-                          {/* <span className="text-[15px] font-semibold text-[#22B54E] leading-none">$20.000</span> */}
-                          {/* <span className="text-gray-400 text-[12px] leading-none self-center">•</span> */}
-                          {/* <span className="text-[14px] text-gray-500 font-medium leading-none">{unitType.typology}</span> */}
-                          
-                          {/* Contador de unidades disponibles */}
-                          {availableUnitsCount > 0 && (
-                            <>
-                              <span className="text-gray-400 text-[12px] leading-none self-center">•</span>
-                              <span className="text-[14px] font-medium text-[#22B54E] leading-none">
-                                {availableUnitsCount} {availableUnitsCount === 1 ? 'unidad disponible' : 'unidades disponibles'}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      )}
                     </div>
-                    
+
+                    {isModelView && unitType && availableUnitsCount > 0 && (
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {/* Badge de unidades disponibles */}
+                        <div
+                          className="inline-flex items-center px-2.5 h-[26px] rounded-[4px] text-[13px] font-medium whitespace-nowrap"
+                          style={{
+                            backgroundColor: "rgba(34, 181, 78, 0.1)",
+                            border: "1px solid #22B54E",
+                            color: "#22B54E",
+                          }}
+                        >
+                          <span>
+                            {availableUnitsCount} {availableUnitsCount === 1 ? "Unidad disponible" : "Unidades disponibles"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {!isModelView && unit && (
                       <div className="flex items-center gap-3">
-                        {/* Título de la unidad ("12L") */}
-                        <span className="text-[14px] text-gray-700 font-medium">
-                          {displayTitle}
-                        </span>
-
                         {/* Badge de Disponibilidad */}
                         <div
                           className="inline-flex items-center gap-1.5 px-2.5 h-[26px] rounded-md text-[13px] font-medium"
@@ -180,12 +182,23 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                           </span>
                         </div>
 
-                        {/* Precio */}
-                        {project.show_price && unit.price && (
-                          <div className="inline-flex items-center px-2 h-[26px] rounded-md text-[13px] font-semibold bg-gray-100 text-gray-800 border border-gray-200">
-                            <span>{unit.price}</span>
-                          </div>
-                        )}
+                        {/* Título de la unidad ("8E") */}
+                        <span className="text-[14px] text-gray-700 font-medium">
+                          {displayTitle}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Precio: de la unidad puntual, o "desde" del modelo */}
+                    {project.show_price && priceValue && (
+                      <div>
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">
+                          Precio
+                        </p>
+                        <p className="leading-none">
+                          <span className="text-[22px] font-semibold text-gray-900">{priceValue}</span>
+                          <span className="ml-1 text-[13px] font-medium text-gray-500">US.</span>
+                        </p>
                       </div>
                     )}
                   </div>
