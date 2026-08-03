@@ -18,9 +18,11 @@ export const getProjectData = async (): Promise<ProjectData> => {
   // 1. Intentar offline/local primero si sabemos que no hay internet
   if (isClient && !navigator.onLine) {
     try {
-      const { db } = await import('@/lib/offline/db');
+      const { db, PROJECT_CACHE_SCHEMA_VERSION } = await import('@/lib/offline/db');
       const record = await db.projects.get(slug);
-      if (record) return record.data;
+      if (record && record.schemaVersion === PROJECT_CACHE_SCHEMA_VERSION) {
+        return record.data;
+      }
     } catch (e) {
       console.warn("[Project Service]: Fallo lectura offline", e);
     }
@@ -53,8 +55,13 @@ export const getProjectData = async (): Promise<ProjectData> => {
     // 2. Guardar en IndexedDB de forma silenciosa para uso offline futuro
     if (isClient) {
       try {
-        const { db } = await import('@/lib/offline/db');
-        await db.projects.put({ slug, data: mappedData, updatedAt: Date.now() });
+        const { db, PROJECT_CACHE_SCHEMA_VERSION } = await import('@/lib/offline/db');
+        await db.projects.put({
+          slug,
+          data: mappedData,
+          updatedAt: Date.now(),
+          schemaVersion: PROJECT_CACHE_SCHEMA_VERSION,
+        });
       } catch (e) {
         console.warn("[Project Service]: Error guardando cache local", e);
       }
@@ -65,9 +72,9 @@ export const getProjectData = async (): Promise<ProjectData> => {
     // 3. Fallback a datos locales si la red falló inesperadamente
     if (isClient) {
       try {
-        const { db } = await import('@/lib/offline/db');
+        const { db, PROJECT_CACHE_SCHEMA_VERSION } = await import('@/lib/offline/db');
         const record = await db.projects.get(slug);
-        if (record) {
+        if (record && record.schemaVersion === PROJECT_CACHE_SCHEMA_VERSION) {
           console.log(`[Project Service]: Fallback local tras fallo de servidor/red`);
           return record.data;
         }
