@@ -5,6 +5,7 @@ export const GET_PROJECT_DATA = `
     projects(filters: { title: { eq: $slug } })  {
       title
       subdomain
+      show_price
       logo {
         url
       }
@@ -74,7 +75,6 @@ export const GET_PROJECT_DATA = `
           shape_viewbox
           centroid_point
           price
-          show_price
           floor {
             title
             level

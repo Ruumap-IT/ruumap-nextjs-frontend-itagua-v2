@@ -107,7 +107,6 @@ export const mapUnit = (unit: any): Unit => {
     centroid_point: mapCentroidPoint(unit?.centroid_point),
     floor: mapFloor(unit?.floor),
     price: formatPrice(unit?.price),
-    show_price: unit?.show_price,
   };
 };
 
@@ -147,6 +146,7 @@ export const mapUnitType = (unitType: any): UnitType => {
 export const mapProjectData = (project: any): ProjectData => ({
   title: project?.title || "",
   subdomain: project?.subdomain || "",
+  show_price: project?.show_price ?? true,
   logo: mapMediaFile(project?.logo),
   welcome_video: mapMediaFile(project?.welcome_video),
   brochure: mapMediaFile(project?.brochure),

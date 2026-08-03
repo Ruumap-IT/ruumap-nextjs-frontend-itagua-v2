@@ -78,7 +78,6 @@ export interface Unit {
   centroid_point: CentroidPoint;
   floor: Floor;
   price?: string;
-  show_price?: boolean;
 }
 
 // Interfaces para tipos de unidad
@@ -109,6 +108,7 @@ export interface Partner {
 export interface ProjectData {
   title: string;
   subdomain: string;
+  show_price: boolean;
   logo: MediaFile;
   welcome_video: MediaFile;
   brochure: MediaFile;
