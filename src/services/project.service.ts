@@ -40,7 +40,7 @@ export const getProjectData = async (): Promise<ProjectData> => {
         variables: { slug },
       }),
       next: {
-        revalidate: 60, // ISR revalidation (1 hora)
+        revalidate: 3600, // ISR revalidation (1 hora)
         tags: ["project-data"],
       },
     });
