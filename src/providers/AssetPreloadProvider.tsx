@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import { useProjectStore } from "@/store/useProjectStore";
 import { getAllFloors } from "@/lib/graphql/mappers";
 import Image from "next/image";
-import { normalizeUnitTitle } from "@/utils/string";
 
 /**
  * AssetPreloadProvider - precarga pasiva de imagenes usando componentes
@@ -48,25 +47,14 @@ export default function AssetPreloadProvider({ children }: { children: React.Rea
       });
     } catch {}
 
-    // 3. Foto 1 de Amenities
-    const amenities = project.unit_types.find(ut => normalizeUnitTitle(ut.title).toUpperCase() === "AMENITIES");
-    if (amenities && amenities.gallery && amenities.gallery.length > 0) {
-      urls.add(amenities.gallery[0].url);
-    }
-
-    // 4. Foto 1 de cada familia de Modelos
-    const models = project.unit_types.filter(ut => normalizeUnitTitle(ut.title).toUpperCase() !== "AMENITIES");
-    const seenTitles = new Set<string>();
-
-    models.forEach(m => {
-      const base = normalizeUnitTitle(m.title);
-      if (!seenTitles.has(base)) {
-        seenTitles.add(base);
-        if (m.gallery && m.gallery.length > 0) {
-          urls.add(m.gallery[0].url);
-        }
-      }
-    });
+    // NOTA (reduce-hidden-image-preload-scope): la foto 1 de Amenities y la
+    // foto 1 de cada familia de Modelos se sacaron deliberadamente de esta
+    // precarga oculta. Esas vistas (`/departments/[model]`, `/amenities/[model]`)
+    // ya cargan su galeria via ZoomableImage, que tiene su propio fade/skeleton
+    // contextual y no depende de este precargador para evitar una pantalla en
+    // blanco. Los planos de piso SI se mantienen arriba: FloorViewer depende
+    // de que ya esten en cache del navegador para no repetir el fade al
+    // cambiar de planta (ver AssetImage.tsx).
 
     setCriticalUrls(Array.from(urls));
   }, [project]);
