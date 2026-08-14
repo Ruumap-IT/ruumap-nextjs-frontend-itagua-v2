@@ -280,11 +280,11 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                         {documents.length === 0 && project.brochure?.url && (
                           <DownloadLink
                             fileUrl={project.brochure.url}
-                            fileName={`${project.title} - Brochure`}
+                            fileName="Itagua Brochure"
                             className="flex items-center gap-3 text-[14px] text-gray-900 hover:text-gray-600 transition-colors w-full text-left active:scale-95"
                             icon={<BrochureIcon className="w-5 h-5 opacity-60" />}
                           >
-                            <span className="truncate">Itaguav3 Brochure</span>
+                            <span className="truncate">Itagua Brochure</span>
                           </DownloadLink>
                         )}
                       </div>

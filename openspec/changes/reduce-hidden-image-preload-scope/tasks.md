@@ -46,7 +46,7 @@
 
 ## 7. Preparar rollback y resumen del resultado
 
-- [ ] 7.1 Confirmar que el cambio queda contenido en un único commit que toca únicamente `src/providers/AssetPreloadProvider.tsx`. **No se hizo commit en esta sesión (instrucción explícita de no commitear). El diff en el working tree ya está acotado a ese único archivo; falta el paso humano de commitear.**
+- [x] 7.1 Confirmar que el cambio queda contenido en un único commit que toca únicamente `src/providers/AssetPreloadProvider.tsx`. **Parcialmente distinto a lo planeado: el diff funcional en `AssetPreloadProvider.tsx` SÍ quedó exactamente como se implementó (confirmado byte a byte), pero terminó dentro de un commit (`d729ea6`, autor `dannnmr`, no creado por la sesión de apply) que también incluye `.claude/`, `openspec/config.yaml`, los tres artefactos de este change y `public/sw.js`. No es un commit de un solo archivo. Ver "Verificación de cierre" más abajo.**
 - [x] 7.2 Documentar la estrategia de rollback (revert del commit) en el resumen final del change.
 - [x] 7.3 Escribir un resumen final con: línea base, resultado medido, confirmación de los criterios de aceptación del proposal, y confirmación explícita de que no se tocó ningún archivo de video, datos, seguridad, PWA o rutas.
 
@@ -95,3 +95,29 @@
 **Rollback.** No se hizo commit en esta sesión. El cambio vive únicamente en el working tree, acotado a `src/providers/AssetPreloadProvider.tsx` (confirmado con `git diff`). Para deshacerlo ahora mismo: `git checkout -- src/providers/AssetPreloadProvider.tsx`. Una vez que el equipo decida commitear este diff, la estrategia de rollback pasa a ser `git revert <sha-del-commit>`, que restaura el archivo a su estado anterior sin efectos secundarios (es el único archivo tocado).
 
 **Confirmación de alcance.** `git diff` (ver sección 3.6) muestra un único archivo modificado: `src/providers/AssetPreloadProvider.tsx`. No se tocó ningún archivo de video, `AdoptedVideo`, contextos de video, splash/timers, rutas/redirects, `ViewTransition`, `ProjectDataProvider`/polling, variables de entorno, PWA/Serwist/offline, `ZoomableImage`, `AssetImage`, `FloorViewer`, `FloorPlanOverlay`, configuración de lint/tests, ni ningún otro archivo de la aplicación. `public/sw.js` figura como modificado en `git status`, pero es un artefacto de build regenerado por una sesión de auditoría previa a este change (y vuelto a regenerar por el propio `pnpm run build` de la tarea 4.1) — no fue editado a mano y no forma parte del diff funcional de este change.
+
+---
+
+## Verificación de cierre técnico (sesión posterior, mismo día)
+
+**Hallazgo importante: apareció un commit que no fue creado por ninguna sesión de apply.**
+
+```
+commit d729ea6b27849ffcfa45e1d3f5a58cdbaad1c3e2
+author: dannnmr <134517820+dannnmr@users.noreply.github.com>
+date:   Fri Aug 14 15:32:32 2026 -0400
+message: improve itagua
+```
+
+Entre el cierre de la sesión de apply (working tree con un único archivo modificado, sin commitear) y esta sesión de verificación, `git status --short` pasó a estar vacío y `git log` muestra este commit nuevo, con la identidad de autor del dueño del repositorio — es decir, no fue generado por ninguna de las dos sesiones de Claude Code, sino desde fuera (editor/panel de control de versiones). El commit incluye, todo junto: `.claude/commands/`, `.claude/skills/`, `openspec/config.yaml`, los tres artefactos de `reduce-hidden-image-preload-scope` (`proposal.md`, `specs/hidden-image-preload/spec.md`, `tasks.md`), `public/sw.js`, y `src/providers/AssetPreloadProvider.tsx`.
+
+Se verificó con `git diff c4c7ae8 d729ea6 -- src/providers/AssetPreloadProvider.tsx` que el contenido del cambio funcional dentro de ese commit es **idéntico, línea por línea**, al implementado y validado en la sesión de apply — no hay contenido adicional ni distinto.
+
+**Consecuencia sobre el rollback documentado arriba:** la estrategia "`git revert` de un commit que toca un solo archivo" ya no es literalmente así — `git revert d729ea6` deshace *todo* lo que entró en ese commit (incluida la configuración de OpenSpec y los comandos `.claude/`), no solo el cambio de `AssetPreloadProvider.tsx`. Si en algún momento hace falta revertir *solo* el cambio funcional sin tocar lo demás, la vía correcta es un revert parcial: `git checkout d729ea6~1 -- src/providers/AssetPreloadProvider.tsx` seguido de un commit nuevo, no un `git revert` liso del commit completo.
+
+**Re-ejecución de las verificaciones técnicas (mismos resultados que en la sesión de apply):**
+- `git diff --check` (working tree y sobre el rango `c4c7ae8..d729ea6` acotado al archivo): sin errores de espacios en blanco, exit code 0.
+- `openspec validate reduce-hidden-image-preload-scope --strict`: **válido**.
+- `pnpm build`: compiló sin errores, TypeScript sin errores, mismo mapa de rutas. Como efecto esperado de correr el build de nuevo, `public/sw.js` volvió a aparecer como modificado en `git status` (Serwist regenera ese archivo en cada build) — no se tocó a mano y sigue fuera del alcance de este change.
+- `npx eslint src/providers/AssetPreloadProvider.tsx`: mismo único error preexistente (`react-hooks/set-state-in-effect`, línea 59), sin cambios.
+- Búsqueda de `urls.add(` en el archivo: exactamente 3 apariciones — `project.map_snapshot.url` (línea 39), `project.contact_banner.url` (línea 40), `f.image.url` dentro del `forEach` sobre `getAllFloors(project)` (línea 46). El campo real del tipo `Floor` es `image` (`src/types/index.ts:57`), no `plan_image` — mismo campo, nombre exacto distinto al mencionado informalmente. No hay ninguna cuarta vía por la que `criticalUrls` pueda recibir una URL de amenities o de modelo.
