@@ -161,6 +161,7 @@ export const mapUnitType = (unitType: any): UnitType => {
 
 export const mapProjectData = (project: any): ProjectData => ({
   title: project?.title || "",
+  updatedAt: project?.updatedAt || undefined,
   subdomain: project?.subdomain || "",
   show_price: project?.show_price ?? true,
   logo: mapMediaFile(project?.logo),
@@ -193,7 +194,30 @@ export const mapProjectsResponse = (response: ProjectsResponse | any): ProjectDa
     mappedProject.floors = root.floors.map(mapFloor);
   }
 
+  mappedProject.version = computeRevisionKey(root);
+
   return mappedProject;
+};
+
+// --- REVISIÓN LIVIANA (polling) ---
+
+interface RawRevisionRoot {
+  projects?: Array<{ updatedAt?: string | null }> | null;
+  floors?: Array<{ updatedAt?: string | null }> | null;
+}
+
+// Fingerprint barato construido a partir de los `updatedAt` de `projects` y
+// `floors` — el mismo shape que devuelven tanto GET_PROJECT_DATA como
+// GET_PROJECT_REVISION, así que esta función sirve para ambas respuestas.
+// Se usa para decidir si vale la pena traer el proyecto completo de nuevo.
+export const computeRevisionKey = (root: RawRevisionRoot | null | undefined): string => {
+  const projectUpdatedAt = root?.projects?.[0]?.updatedAt ?? "";
+  const floorsUpdatedAt = (root?.floors ?? [])
+    .map((f) => f?.updatedAt ?? "")
+    .filter(Boolean)
+    .sort()
+    .join("|");
+  return `${projectUpdatedAt}::${floorsUpdatedAt}`;
 };
 
 // --- UTILIDADES ---

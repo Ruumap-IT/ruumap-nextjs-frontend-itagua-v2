@@ -1,11 +1,18 @@
 // src/services/project.service.ts
 
-import { GET_PROJECT_DATA } from "@/lib/graphql/queries";
-import { mapProjectsResponse } from "@/lib/graphql/mappers";
+import { GET_PROJECT_DATA, GET_PROJECT_REVISION } from "@/lib/graphql/queries";
+import { mapProjectsResponse, computeRevisionKey } from "@/lib/graphql/mappers";
 import { ProjectsResponse, ProjectData } from "@/types";
 import { ENV } from "@/constants/env";
 
-export const getProjectData = async (): Promise<ProjectData> => {
+export interface GetProjectDataOptions {
+  /** Permite abortar el fetch (ej. desde un poller con timeout). Opcional: la SSR no la usa. */
+  signal?: AbortSignal;
+}
+
+export const getProjectData = async (
+  options?: GetProjectDataOptions
+): Promise<ProjectData> => {
   const slug = ENV.PROJECT_SLUG;
 
   if (!slug) {
@@ -34,11 +41,18 @@ export const getProjectData = async (): Promise<ProjectData> => {
       headers: {
         Authorization: `Bearer ${ENV.STRAPI_TOKEN}`,
         "Content-Type": "application/json",
+        // La API valida el Origin (como CORS) y devuelve 403 sin él. El
+        // navegador lo manda solo (y no deja que JS lo pise: es un header
+        // "forbidden" para fetch client-side, así que esto es un no-op
+        // inofensivo ahí) — pero el fetch() de Node en SSR no lo manda por
+        // su cuenta, por eso hace falta setearlo a mano acá.
+        Origin: ENV.SITE_URL,
       },
       body: JSON.stringify({
         query: GET_PROJECT_DATA,
         variables: { slug },
       }),
+      signal: options?.signal,
       next: {
         revalidate: 3600, // ISR revalidation (1 hora)
         tags: ["project-data"],
@@ -89,4 +103,52 @@ export const getProjectData = async (): Promise<ProjectData> => {
       }`
     );
   }
+};
+
+/**
+ * Consulta liviana de "revisión" (Fase 1 de la mitigación de tormenta de
+ * solicitudes): trae solo los `updatedAt` de `projects`/`floors`, sin nada de
+ * lo pesado/anidado de GET_PROJECT_DATA. El poller solo dispara
+ * `getProjectData()` completa cuando esta revisión cambió respecto a la
+ * última conocida.
+ *
+ * A diferencia de `getProjectData`, esta función:
+ *  - No tiene fallback a IndexedDB (no tiene sentido "cachear" una revisión).
+ *  - No usa `next.revalidate`: siempre debe ir a red, es deliberadamente
+ *    barata para poder pollearse seguido.
+ *  - Propaga los errores tal cual, para que el poller aplique su backoff.
+ */
+export const getProjectRevision = async (
+  options?: GetProjectDataOptions
+): Promise<string> => {
+  const slug = ENV.PROJECT_SLUG;
+
+  if (!slug) {
+    throw new Error("El PROJECT_SLUG no está definido en las variables de entorno");
+  }
+
+  const res = await fetch(ENV.GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${ENV.STRAPI_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: GET_PROJECT_REVISION,
+      variables: { slug },
+    }),
+    signal: options?.signal,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error en fetch HTTP (revisión): ${res.status} ${res.statusText}`);
+  }
+
+  const { data, errors } = await res.json();
+
+  if (errors?.length) {
+    throw new Error(`Error GraphQL (revisión): ${errors[0]?.message || "desconocido"}`);
+  }
+
+  return computeRevisionKey(data);
 };

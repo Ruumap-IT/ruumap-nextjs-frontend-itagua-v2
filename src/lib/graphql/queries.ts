@@ -4,6 +4,7 @@ export const GET_PROJECT_DATA = `
   query getProjectData($slug: String!) {
     projects(filters: { title: { eq: $slug } })  {
       title
+      updatedAt
       subdomain
       show_price
       logo {
@@ -112,9 +113,32 @@ export const GET_PROJECT_DATA = `
     floors {
       title
       level
+      updatedAt
       image {
         url
       }
+    }
+  }
+`;
+
+// Consulta liviana de "revisión": solo trae los timestamps que necesitamos
+// para saber si algo cambió, sin ninguno de los campos anidados/pesados de
+// GET_PROJECT_DATA. Pensada para pollear cada pocos segundos sin castigar al
+// backend; GET_PROJECT_DATA completa solo se dispara cuando la revisión
+// cambia (ver src/lib/polling y src/services/project.service.ts).
+//
+// NOTA: si `unit_types`/`units` resultan ser relaciones a content-types
+// separados (en vez de componentes embebidos en `projects`), un cambio ahí
+// podría no mover `projects.updatedAt`. Mientras eso no se confirme contra
+// el schema real, el poller aplica además un "safety net" que fuerza una
+// consulta completa cada N ciclos sin cambios detectados.
+export const GET_PROJECT_REVISION = `
+  query getProjectRevision($slug: String!) {
+    projects(filters: { title: { eq: $slug } }) {
+      updatedAt
+    }
+    floors {
+      updatedAt
     }
   }
 `;
