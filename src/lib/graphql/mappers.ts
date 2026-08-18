@@ -201,15 +201,40 @@ export const mapProjectsResponse = (response: ProjectsResponse | any): ProjectDa
 
 // --- REVISIÓN LIVIANA (polling) ---
 
+interface RevisionEntity {
+  documentId?: string | null;
+  updatedAt?: string | null;
+}
+
 interface RawRevisionRoot {
   projects?: Array<{ updatedAt?: string | null }> | null;
   floors?: Array<{ updatedAt?: string | null }> | null;
+  unitTypes?: RevisionEntity[] | null;
+  units?: RevisionEntity[] | null;
+  unitTypeDocuments?: RevisionEntity[] | null;
 }
 
-// Fingerprint barato construido a partir de los `updatedAt` de `projects` y
-// `floors` — el mismo shape que devuelven tanto GET_PROJECT_DATA como
-// GET_PROJECT_REVISION, así que esta función sirve para ambas respuestas.
-// Se usa para decidir si vale la pena traer el proyecto completo de nuevo.
+// Serializa una lista de entidades con documentId+updatedAt de forma
+// insensible al orden (ordenamos por documentId antes de unir), para que
+// agregar/quitar/reordenar registros en la respuesta de Strapi siempre
+// cambie la clave, sin falsos "cambió" solo por el orden de llegada.
+const serializeEntities = (entities: RevisionEntity[] | null | undefined): string =>
+  (entities ?? [])
+    .map((e) => `${e?.documentId ?? ""}:${e?.updatedAt ?? ""}`)
+    .sort()
+    .join(",");
+
+// Fingerprint barato construido a partir de los `updatedAt` de `projects`,
+// `floors`, `unitTypes`, `units` y `unitTypeDocuments` — el mismo shape que
+// devuelven tanto GET_PROJECT_DATA (que además trae `documentId` en sus
+// unidades/tipologías, ver mappers de unit/unitType) como GET_PROJECT_REVISION,
+// así que esta función sirve para ambas respuestas. Se usa para decidir si
+// vale la pena traer el proyecto completo de nuevo.
+//
+// Ver el comentario de GET_PROJECT_REVISION (queries.ts) para el porqué de
+// incluir unitTypes/units/unitTypeDocuments: son content-types
+// independientes en Strapi, confirmado por introspección — su updatedAt no
+// se refleja en `projects.updatedAt`.
 export const computeRevisionKey = (root: RawRevisionRoot | null | undefined): string => {
   const projectUpdatedAt = root?.projects?.[0]?.updatedAt ?? "";
   const floorsUpdatedAt = (root?.floors ?? [])
@@ -217,7 +242,10 @@ export const computeRevisionKey = (root: RawRevisionRoot | null | undefined): st
     .filter(Boolean)
     .sort()
     .join("|");
-  return `${projectUpdatedAt}::${floorsUpdatedAt}`;
+  const unitTypesKey = serializeEntities(root?.unitTypes);
+  const unitsKey = serializeEntities(root?.units);
+  const documentsKey = serializeEntities(root?.unitTypeDocuments);
+  return `${projectUpdatedAt}::${floorsUpdatedAt}::${unitTypesKey}::${unitsKey}::${documentsKey}`;
 };
 
 // --- UTILIDADES ---

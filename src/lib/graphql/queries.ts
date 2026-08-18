@@ -118,26 +118,66 @@ export const GET_PROJECT_DATA = `
         url
       }
     }
+    # Mismos campos raíz (livianos: solo documentId+updatedAt) que pide
+    # GET_PROJECT_REVISION más abajo. Necesarios para que computeRevisionKey
+    # calcule el mismo fingerprint sobre la respuesta de ESTA consulta que
+    # sobre la de la revisión liviana — si no coincidieran en shape, el
+    # "version" quedaría desincronizado y cada ciclo de polling creería que
+    # cambió algo, disparando GET_PROJECT_DATA otra vez sin necesidad.
+    unitTypes(filters: { project: { title: { eq: $slug } } }) {
+      documentId
+      updatedAt
+    }
+    units(filters: { unit_type: { project: { title: { eq: $slug } } } }) {
+      documentId
+      updatedAt
+    }
+    unitTypeDocuments(filters: { unit_type: { project: { title: { eq: $slug } } } }) {
+      documentId
+      updatedAt
+    }
   }
 `;
 
-// Consulta liviana de "revisión": solo trae los timestamps que necesitamos
-// para saber si algo cambió, sin ninguno de los campos anidados/pesados de
-// GET_PROJECT_DATA. Pensada para pollear cada pocos segundos sin castigar al
-// backend; GET_PROJECT_DATA completa solo se dispara cuando la revisión
-// cambia (ver src/lib/polling y src/services/project.service.ts).
+// Consulta liviana de "revisión": solo trae `documentId`+`updatedAt` de cada
+// entidad relevante, sin ningún campo anidado/pesado de GET_PROJECT_DATA.
+// Pensada para pollear cada pocos segundos sin castigar al backend;
+// GET_PROJECT_DATA completa solo se dispara cuando la revisión cambia (ver
+// src/lib/polling y src/services/project.service.ts).
 //
-// NOTA: si `unit_types`/`units` resultan ser relaciones a content-types
-// separados (en vez de componentes embebidos en `projects`), un cambio ahí
-// podría no mover `projects.updatedAt`. Mientras eso no se confirme contra
-// el schema real, el poller aplica además un "safety net" que fuerza una
-// consulta completa cada N ciclos sin cambios detectados.
+// CONFIRMADO por introspección contra el schema real de Strapi (no es una
+// suposición): `unit_types`/`units`/`unit_type_documents` son content-types
+// independientes conectados por relación a `projects` — NO son componentes
+// embebidos. Por eso `projects.updatedAt` NO se mueve cuando cambia el
+// precio o la disponibilidad de una unidad, ni el título/categoría de una
+// tipología: hace falta preguntarles su propio `updatedAt` directamente,
+// filtrando por relación al proyecto (`unit_type: { project: { title: ... } }`).
+// Medido en vivo: ~1.7s / ~7KB — sigue siendo ~2x más rápido y ~15x más
+// liviano que GET_PROJECT_DATA (~3.5s / ~108KB).
+//
+// Gap conocido y documentado, NO cubierto por esta consulta: editar el
+// contenido propio de un registro compartido (el color de un
+// AvailabilityStatus, el ícono de un Feature) SIN reasignarlo a ninguna
+// unidad/tipología. Ese caso solo se refleja vía el refresco de respaldo
+// (ver FULL_REFRESH_SAFETY_NET_TICKS en ProjectDataProvider.tsx).
 export const GET_PROJECT_REVISION = `
   query getProjectRevision($slug: String!) {
     projects(filters: { title: { eq: $slug } }) {
       updatedAt
     }
     floors {
+      updatedAt
+    }
+    unitTypes(filters: { project: { title: { eq: $slug } } }) {
+      documentId
+      updatedAt
+    }
+    units(filters: { unit_type: { project: { title: { eq: $slug } } } }) {
+      documentId
+      updatedAt
+    }
+    unitTypeDocuments(filters: { unit_type: { project: { title: { eq: $slug } } } }) {
+      documentId
       updatedAt
     }
   }

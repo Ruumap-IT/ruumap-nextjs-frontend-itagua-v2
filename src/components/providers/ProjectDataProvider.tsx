@@ -27,19 +27,26 @@ interface Props {
 // (getProjectData). Esto reduce drásticamente el costo del caso normal (sin
 // cambios en el panel) sin perder velocidad de propagación cuando sí los hay.
 //
-// NOTA sobre FULL_REFRESH_SAFETY_NET_TICKS: no se pudo confirmar contra el
-// schema real de Strapi si `unit_types`/`units` son componentes embebidos en
-// `projects` (en cuyo caso su `updatedAt` sí mueve la revisión) o relaciones
-// a content-types separados (en cuyo caso podrían no moverla). Mientras eso
-// no se confirme, se fuerza una consulta completa cada N ciclos sin cambios
-// detectados, como red de seguridad. Si se confirma que son componentes
-// embebidos, este safety net puede eliminarse.
+// NOTA sobre FULL_REFRESH_SAFETY_NET_TICKS: CONFIRMADO por introspección
+// contra el schema real de Strapi que `unit_types`/`units`/`unit_type_documents`
+// son content-types independientes conectados por relación a `projects` (no
+// componentes embebidos) — su `updatedAt` propio NO mueve `projects.updatedAt`.
+// Por eso GET_PROJECT_REVISION ahora los pregunta directamente (ver
+// queries.ts). El único gap que queda (documentado ahí) es editar un
+// registro *compartido* sin reasignarlo — por eso este safety net se
+// mantiene, pero mucho más relajado: cada ~10 minutos en vez de cada ~60-70s,
+// porque ya no es la única red de seguridad contra el caso común.
 export const ProjectDataProvider = ({ children, initialData }: Props) => {
   const { setError, setLoading, data, error } = useProjectStore();
   const startedRef = useRef(false);
 
   useEffect(() => {
-    // Evita doble arranque en StrictMode / remounts del mismo provider.
+    // Evita doble arranque en StrictMode / remounts del mismo provider —
+    // pero SÍ se resetea en el cleanup (ver return más abajo). Sin ese
+    // reset, el doble-invoke de efectos que hace StrictMode en desarrollo
+    // (monta → cleanup → monta de nuevo) dejaba el componente sin ningún
+    // poller activo tras la segunda pasada: el cleanup paraba el poller de
+    // la primera pasada, y el guard bloqueaba crear uno nuevo en la segunda.
     if (startedRef.current) return;
     startedRef.current = true;
 
@@ -54,7 +61,11 @@ export const ProjectDataProvider = ({ children, initialData }: Props) => {
     // repetir la completa.
     const lastRevisionRef = { current: initialData?.version ?? data?.version ?? null };
     const unchangedStreakRef = { current: 0 };
-    const FULL_REFRESH_SAFETY_NET_TICKS = 4; // ~4 ciclos sin cambios ⇒ full refresh igual
+    // ~40 ciclos × ~15s (± jitter) ⇒ full refresh de respaldo cada ~10 min,
+    // no cada ~60-70s. Ver nota arriba: la revisión liviana ya cubre el
+    // caso común (precio, disponibilidad, unidades, tipologías, documentos),
+    // esto es solo red de seguridad para el gap angosto que queda.
+    const FULL_REFRESH_SAFETY_NET_TICKS = 40;
 
     const poller = createSequentialPoller<ProjectData | null>({
       fetcher: async (signal) => {
@@ -116,6 +127,11 @@ export const ProjectDataProvider = ({ children, initialData }: Props) => {
       document.removeEventListener("visibilitychange", handleVisibilityOrOnline);
       window.removeEventListener("online", handleVisibilityOrOnline);
       poller.stop();
+      // Resetea el guard: si React vuelve a correr este efecto (StrictMode
+      // en dev, o un remount real), tiene que poder arrancar un poller
+      // nuevo — sin este reset, el guard de arriba bloqueaba esa segunda
+      // pasada y el componente quedaba sin ningún poller activo.
+      startedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

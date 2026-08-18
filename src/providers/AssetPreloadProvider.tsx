@@ -2,13 +2,16 @@
 
 import React, { useEffect, useState } from "react";
 import { useProjectStore } from "@/store/useProjectStore";
-import { getAllFloors } from "@/lib/graphql/mappers";
 import Image from "next/image";
 
 /**
  * AssetPreloadProvider - precarga pasiva de imagenes usando componentes
- * nativos de Next.js ocultos, igual al patron que ya usan (y funciona bien)
- * los proyectos Artemis y Buen Retiro.
+ * nativos de Next.js ocultos, mismo patron base que usan Artemis y Buen
+ * Retiro — con una diferencia: acá los planos de piso YA NO pasan por este
+ * provider (ver nota más abajo), porque se descubrió que precargar
+ * client-side no alcanzaba para una experiencia fluida en conexiones
+ * lentas. Ver src/app/layout.tsx (FloorImagePreload) y
+ * src/features/units/components/FloorPlanImage.tsx.
  *
  * Es "fire-and-forget": nadie espera a que esto termine (no expone ningun
  * isReady/contexto). Su unico trabajo es calentar la cache del navegador
@@ -39,22 +42,21 @@ export default function AssetPreloadProvider({ children }: { children: React.Rea
     if (project.map_snapshot?.url) urls.add(project.map_snapshot.url);
     if (project.contact_banner?.url) urls.add(project.contact_banner.url);
 
-    // 2. Planos (para transicion rapida en floor-plans)
-    try {
-      const floors = getAllFloors(project);
-      floors.forEach(f => {
-        if (f.image?.url) urls.add(f.image.url);
-      });
-    } catch {}
-
     // NOTA (reduce-hidden-image-preload-scope): la foto 1 de Amenities y la
     // foto 1 de cada familia de Modelos se sacaron deliberadamente de esta
     // precarga oculta. Esas vistas (`/departments/[model]`, `/amenities/[model]`)
     // ya cargan su galeria via ZoomableImage, que tiene su propio fade/skeleton
     // contextual y no depende de este precargador para evitar una pantalla en
-    // blanco. Los planos de piso SI se mantienen arriba: FloorViewer depende
-    // de que ya esten en cache del navegador para no repetir el fade al
-    // cambiar de planta (ver AssetImage.tsx).
+    // blanco.
+    //
+    // NOTA (fluidez de floor-plans): los planos de piso YA NO se agregan
+    // acá. Se movieron a FloorImagePreload (src/app/layout.tsx), que corre
+    // en el servidor y arranca la descarga desde el HTML inicial — mucho
+    // antes de lo que este provider client-side podia lograr. Agregarlos
+    // acá también pediría la misma URL dos veces sin ganar nada. El
+    // "no quedar en blanco" al cambiar de piso ahora lo maneja
+    // FloorPlanImage.tsx con un crossfade que nunca oculta el piso
+    // anterior, en vez de depender de que la precarga llegue a tiempo.
 
     setCriticalUrls(Array.from(urls));
   }, [project]);

@@ -4,7 +4,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import type { Unit } from "@/types";
 import { CentroidTag } from "./CentroidTag";
-import { AssetImage } from "@/components/ui/AssetImage";
+import { FloorPlanImage } from "./FloorPlanImage";
 
 interface FloorPlanOverlayProps {
   imageSrc: string;
@@ -52,11 +52,10 @@ export const FloorPlanOverlay: React.FC<FloorPlanOverlayProps> = ({
         }}
       >
         {/* 1. Imagen del Plano */}
-        <AssetImage
+        <FloorPlanImage
           src={imageSrc}
           alt="Plano de planta"
-          className="absolute inset-0 w-full h-full object-cover"
-          draggable={false}
+          className="absolute inset-0 w-full h-full"
         />
 
         {/* 2. Capa SVG */}

@@ -6,6 +6,8 @@ import AssetPreloadProvider from "@/providers/AssetPreloadProvider"
 import { ProjectDataProvider } from "@/components/providers/ProjectDataProvider";
 import { VideoPreloadProvider } from "@/features/video/contexts/VideoPreloadContext";
 import { getProjectData } from "@/services/project.service";
+import { getAllFloors } from "@/lib/graphql/mappers";
+import { FloorImagePreload } from "@/components/FloorImagePreload";
 import { OrientationGuard } from "@/components/ui/OrientationGuard";
 import { OrientationProvider } from "@/contexts/OrientationContext";
 import { OfflineDownloadBanner } from "@/components/ui/OfflineDownloadBanner";
@@ -88,6 +90,23 @@ export default async function RootLayout({
     console.error("Error fetching project data in SSR", e);
   }
 
+  // Todos los planos de piso, calculados acá (servidor) para arrancar su
+  // descarga desde el HTML inicial en vez de esperar a que el cliente
+  // hidrate — ver FloorImagePreload.tsx. El primero (floors[0], el mismo
+  // que FloorViewer.tsx toma por defecto) va con prioridad alta porque es
+  // el que el usuario ve primero; el resto entra con prioridad baja para no
+  // competir por ancho de banda con JS/CSS durante la carga inicial,
+  // especialmente en conexiones lentas.
+  const floorImageUrls = projectData
+    ? Array.from(
+        new Set(
+          getAllFloors(projectData)
+            .map((f) => f.image?.url)
+            .filter((url): url is string => Boolean(url))
+        )
+      )
+    : [];
+
   return (
     <html lang="es" className={inter.variable}>
       <head>
@@ -118,6 +137,9 @@ export default async function RootLayout({
       <body
         className={`antialiased min-h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-[#DDDDDD]`}
       >
+        {floorImageUrls.map((url, i) => (
+          <FloorImagePreload key={url} href={url} fetchPriority={i === 0 ? "high" : "low"} />
+        ))}
         <OrientationProvider>
           {/* <OfflineDownloadBanner />
           <OfflineDownloadOverlay /> */}

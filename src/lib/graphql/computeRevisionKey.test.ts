@@ -58,4 +58,80 @@ describe("computeRevisionKey", () => {
     expect(() => computeRevisionKey({})).not.toThrow();
     expect(() => computeRevisionKey({ projects: [], floors: null })).not.toThrow();
   });
+
+  // --- unitTypes/units/unitTypeDocuments: content-types independientes ---
+  // (confirmado por introspección contra Strapi, ver queries.ts) cuyo
+  // updatedAt NO mueve projects.updatedAt. Estos casos son el motivo real
+  // del cambio de hoy: sin ellos, cambiar el precio o la disponibilidad de
+  // una unidad no cambiaba la revisión.
+
+  it("cambia si cambia el updatedAt de una unidad (precio/disponibilidad), aunque el proyecto no cambie", () => {
+    const base = { projects: [{ updatedAt: "2026-08-17T10:00:00.000Z" }], floors: [] };
+    const before = computeRevisionKey({
+      ...base,
+      units: [{ documentId: "u1", updatedAt: "2026-08-17T09:00:00.000Z" }],
+    });
+    const after = computeRevisionKey({
+      ...base,
+      units: [{ documentId: "u1", updatedAt: "2026-08-17T09:30:00.000Z" }],
+    });
+    expect(before).not.toBe(after);
+  });
+
+  it("cambia si cambia el updatedAt de una tipología (unitType), aunque el proyecto no cambie", () => {
+    const base = { projects: [{ updatedAt: "2026-08-17T10:00:00.000Z" }], floors: [] };
+    const before = computeRevisionKey({
+      ...base,
+      unitTypes: [{ documentId: "t1", updatedAt: "2026-08-17T09:00:00.000Z" }],
+    });
+    const after = computeRevisionKey({
+      ...base,
+      unitTypes: [{ documentId: "t1", updatedAt: "2026-08-17T09:30:00.000Z" }],
+    });
+    expect(before).not.toBe(after);
+  });
+
+  it("cambia si se agrega/quita una unidad o documento, aunque ningún updatedAt existente cambie", () => {
+    const base = { projects: [{ updatedAt: "2026-08-17T10:00:00.000Z" }], floors: [] };
+    const before = computeRevisionKey({
+      ...base,
+      units: [{ documentId: "u1", updatedAt: "2026-08-17T09:00:00.000Z" }],
+      unitTypeDocuments: [],
+    });
+    const after = computeRevisionKey({
+      ...base,
+      units: [
+        { documentId: "u1", updatedAt: "2026-08-17T09:00:00.000Z" },
+        { documentId: "u2", updatedAt: "2026-08-17T09:05:00.000Z" },
+      ],
+      unitTypeDocuments: [{ documentId: "d1", updatedAt: "2026-08-17T09:10:00.000Z" }],
+    });
+    expect(before).not.toBe(after);
+  });
+
+  it("es insensible al orden de unidades/tipologías/documentos", () => {
+    const base = { projects: [{ updatedAt: "2026-08-17T10:00:00.000Z" }], floors: [] };
+    const a = computeRevisionKey({
+      ...base,
+      units: [
+        { documentId: "u1", updatedAt: "2026-08-17T09:00:00.000Z" },
+        { documentId: "u2", updatedAt: "2026-08-17T09:05:00.000Z" },
+      ],
+    });
+    const b = computeRevisionKey({
+      ...base,
+      units: [
+        { documentId: "u2", updatedAt: "2026-08-17T09:05:00.000Z" },
+        { documentId: "u1", updatedAt: "2026-08-17T09:00:00.000Z" },
+      ],
+    });
+    expect(a).toBe(b);
+  });
+
+  it("el mismo documentId con distinto updatedAt SÍ cambia la clave (no solo compara IDs)", () => {
+    const base = { projects: [{ updatedAt: "2026-08-17T10:00:00.000Z" }], floors: [] };
+    const before = computeRevisionKey({ ...base, units: [{ documentId: "u1", updatedAt: "A" }] });
+    const after = computeRevisionKey({ ...base, units: [{ documentId: "u1", updatedAt: "B" }] });
+    expect(before).not.toBe(after);
+  });
 });

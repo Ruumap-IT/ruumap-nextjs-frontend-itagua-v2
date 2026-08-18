@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect } from "react";
+import React, { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useAssetResolver } from "@/hooks/useAssetResolver";
 
 interface Props extends React.ImgHTMLAttributes<HTMLImageElement> {
@@ -43,7 +43,18 @@ interface Props extends React.ImgHTMLAttributes<HTMLImageElement> {
  * por un instante y se repita el fade en cada cambio. Un elemento recien
  * montado con una URL cacheada SI puede reportar complete: true de forma
  * instantanea, el mismo truco que ya usa ZoomableImage en su galeria.
+ *
+ * PERIODO DE GRACIA (GRACE_PERIOD_MS): si la imagen no esta cacheada y no
+ * termina de cargar en ese tiempo, dejamos de ocultarla en vez de mantenerla
+ * en opacity:0 hasta que el evento onLoad dispare — que podia tardar todo
+ * lo que tardara la descarga real (varios segundos si la precarga de
+ * AssetPreloadProvider todavia no le habia tocado el turno a ese piso).
+ * A partir de ahi se comporta como un <img> comun (igual que en Artemis):
+ * el navegador la pinta progresivamente apenas tenga datos, en vez de
+ * quedar completamente en blanco durante toda la descarga.
  */
+const GRACE_PERIOD_MS = 100;
+
 export function AssetImage({ src, alt, className = "", style, ...props }: Props) {
   const resolvedSrc = useAssetResolver(src);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -69,6 +80,21 @@ export function AssetImage({ src, alt, className = "", style, ...props }: Props)
       setHasError(false);
     }
   }, [finalSrc]);
+
+  // Periodo de gracia: si a esta altura no estaba cacheada, esperamos como
+  // maximo GRACE_PERIOD_MS antes de dejar de ocultarla (ver comentario del
+  // archivo). Si onLoad dispara antes, este timer no llega a hacer nada
+  // (isCached ya es true y el effect corta apenas se re-ejecuta).
+  useEffect(() => {
+    if (isCached) return;
+
+    const timer = setTimeout(() => {
+      setIsCached(true);
+      setIsLoaded(true);
+    }, GRACE_PERIOD_MS);
+
+    return () => clearTimeout(timer);
+  }, [finalSrc, isCached]);
 
   const revealed = isLoaded || hasError;
 
