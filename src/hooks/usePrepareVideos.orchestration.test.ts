@@ -44,53 +44,41 @@ describe("usePrepareVideos - orquestación completa (jsdom)", () => {
     vi.restoreAllMocks();
   });
 
-  it("con una entrada de caché válida, el video queda listo sin pasar por la red", async () => {
+  // Antes, el hook leía Cache Storage (caches.match → .blob() →
+  // createObjectURL) para el camino online. Esa lectura era exactamente la
+  // causa raíz del bug: cdn.ruumap.com es cross-origin y, sin
+  // `crossOrigin` en el <video>, cualquier entrada ahí era una respuesta
+  // opaca — un Blob de 0 bytes, sin importar cuán "válida" pareciera desde
+  // afuera. La corrección real vive en el Service Worker (que ahora nunca
+  // guarda estos videos, ver src/app/sw.ts); acá alcanza con que el
+  // camino online no vuelva a tocar Cache Storage en absoluto.
+  it("usa siempre la URL directa del CDN en el camino online, sin leer Cache Storage ni construir un Blob", async () => {
     const url = "https://cdn.ruumap.com/video.mp4";
+    // Sembramos a propósito una entrada de caché que pasaría la vieja
+    // validación sin problema — si el hook la llegara a leer, el <video>
+    // terminaría apuntando a "blob:mock-url" en vez de la URL directa.
     const body = "x".repeat(50);
-    const validResponse = new Response(body, {
-      status: 200,
-      headers: { "content-length": String(body.length) },
+    mockCachesWith({
+      [url]: new Response(body, {
+        status: 200,
+        headers: { "content-length": String(body.length) },
+      }),
     });
-    mockCachesWith({ [url]: validResponse });
+    const matchSpy = vi.spyOn(globalThis.caches, "match");
 
     const { result } = renderHook(() => usePrepareVideos([url], { timeoutMs: 300 }));
 
     await waitFor(() => expect(result.current.prepared).toHaveLength(1));
     const el = result.current.prepared[0].el;
-    await waitFor(() => expect(el.src).toBeTruthy());
-    // Cache válida ⇒ el <video> apunta al blob simulado, no a la URL real.
-    expect(el.src).toBe("blob:mock-url");
-
-    el.dispatchEvent(new Event("canplay"));
-
-    await waitFor(() => expect(result.current.allReady).toBe(true));
-    expect(result.current.prepared[0].ready).toBe(true);
-    expect(result.current.prepared[0].error).toBeUndefined();
-  });
-
-  it("con una entrada de caché inválida (Content-Length no coincide), la borra y sigue por red hasta quedar listo", async () => {
-    const url = "https://cdn.ruumap.com/video-truncado.mp4";
-    const truncatedResponse = new Response("poco", {
-      status: 200,
-      headers: { "content-length": "9999" }, // dice 9999 bytes, el body real tiene 4
-    });
-    const store = mockCachesWith({ [url]: truncatedResponse });
-
-    const { result } = renderHook(() => usePrepareVideos([url], { timeoutMs: 300 }));
-
-    await waitFor(() => expect(result.current.prepared).toHaveLength(1));
-    const el = result.current.prepared[0].el;
-    // Al descartar la caché por inválida, debe terminar apuntando a la URL
-    // de red directa, no a un blob.
     await waitFor(() => expect(el.src).toBe(url));
 
     el.dispatchEvent(new Event("canplay"));
 
     await waitFor(() => expect(result.current.allReady).toBe(true));
     expect(result.current.prepared[0].ready).toBe(true);
-    // La entrada corrupta se borró del "cache" simulado — no se queda ahí
-    // para siempre.
-    expect(store.has(url)).toBe(false);
+    expect(result.current.prepared[0].error).toBeUndefined();
+    // Nunca se consultó Cache Storage, ni siquiera habiendo algo sembrado.
+    expect(matchSpy).not.toHaveBeenCalled();
   });
 
   it("si el primer intento por red falla, reintenta una vez y puede quedar listo", async () => {

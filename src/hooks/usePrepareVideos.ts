@@ -17,22 +17,18 @@ type Options = {
 };
 
 /**
- * Decide si una Response que salió de `caches.match()` es confiable para
- * convertirla en blob y dársela a un <video>, o si hay que tratarla como si
- * no estuviera cacheada.
+ * Ya NO se usa en el camino online de este hook (ver `loadOne` más abajo) —
+ * ese camino dejó de tocar Cache Storage por completo, porque era
+ * exactamente la causa raíz del bug de blobs opacos/vacíos: cdn.ruumap.com
+ * es cross-origin y, sin `crossOrigin` en el `<video>`, cualquier lectura
+ * vía `caches.match()`/`.blob()` era sobre una respuesta opaca (ver
+ * src/app/sw.ts, que ahora tampoco cachea estos videos).
  *
- * Por qué hace falta esto: `caches.match()` devuelve lo que sea que haya en
- * Cache Storage para esa URL, sin ninguna garantía de que el body esté
- * completo. Si una descarga se cortó a mitad de camino en algún momento
- * (red inestable, pestaña cerrada, el propio servidor cayéndose durante el
- * cacheo), la entrada queda guardada tal cual, truncada, y ahí se queda —
- * el nombre de caché de Serwist es fijo entre deploys, no se limpia sola.
- * Un blob armado desde esa entrada trunca el video; cuando el reproductor
- * busca más allá de esos bytes, tira `ERR_REQUEST_RANGE_NOT_SATISFIABLE`.
- *
- * `response.type === "opaque"` cubre el caso cross-origin sin CORS legible:
- * ahí ni el status ni el Content-Length son inspeccionables, así que no hay
- * forma de confiar en la entrada — se descarta directamente.
+ * Se deja exportada y con sus tests (`usePrepareVideos.test.ts`) porque
+ * sigue siendo una utilidad genuinamente útil: el hito de descarga offline
+ * bajo demanda (pendiente, aparte) necesita validar exactamente esto mismo
+ * — que una respuesta descargada sea completa y legible — antes de
+ * guardarla en IndexedDB/una caché dedicada.
  */
 export function isCacheEntryValid(response: Response, blob: Blob): boolean {
   if (response.type === "opaque") return false;
@@ -51,17 +47,13 @@ export function isCacheEntryValid(response: Response, blob: Blob): boolean {
 }
 
 /**
- * Borra una URL puntual de TODAS las Cache Storage del origen (no solo la
- * de videos: no hace falta acoplarse al nombre interno que usa Serwist —
- * "static-video-assets" hoy, podría cambiar con una actualización del
- * framework — basta con buscarla en todas y borrarla de la que la tenga).
- *
- * Esto es lo que hace la solución permanente en vez de un parche: sin este
- * borrado, una entrada corrupta se queda ahí para siempre (Serwist no la
- * vuelve a tocar hasta que expire por antigüedad, semanas después). Con el
- * borrado, la próxima vez que se pida esa URL el Service Worker la vuelve a
- * cachear limpia mediante su propio CacheFirst — nadie tiene que limpiar
- * "site data" a mano nunca más.
+ * Igual que `isCacheEntryValid`: ya no se usa en el camino online de este
+ * hook — la migración selectiva del Service Worker (src/app/sw.ts,
+ * `purgeStaleCrossOriginVideoEntries`) es ahora la que limpia las entradas
+ * de video contaminadas, una sola vez, en `activate`. Se deja exportada y
+ * con sus tests por la misma razón que la anterior: reutilizable para el
+ * hito de descarga offline (limpiar una descarga fallida antes de
+ * reintentarla).
  */
 export async function deleteCachedEntry(url: string): Promise<void> {
   try {
@@ -131,7 +123,6 @@ export function usePrepareVideos(sources: string[], opts: Options = {}) {
   const [allReady, setAllReady] = useState(false);
 
   const cancelledRef = useRef(false);
-  const blobUrlsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -159,54 +150,23 @@ export function usePrepareVideos(sources: string[], opts: Options = {}) {
     let idx = 0;
     let readyCount = 0;
 
-    // Un único intento de leer + validar la caché, después SIEMPRE termina
-    // resolviendo (nunca rechaza hacia pump()): si todo falla, item.ready
-    // queda en false e item.error seteado, para que la UI pueda mostrar un
-    // poster/fallback en vez de esperar para siempre — nunca se queda
-    // colgado en "Cargando".
+    // Camino online: siempre la URL directa del CDN, sin tocar Cache
+    // Storage. Un único intento y, si falla, un único reintento (también
+    // directo por red) — evita ciclos infinitos. Si ambos fallan, SIEMPRE
+    // termina resolviendo (nunca rechaza hacia pump()): item.ready queda
+    // en false e item.error seteado, para que la UI pueda mostrar un
+    // poster/fallback en vez de esperar para siempre.
     async function loadOne(item: PreparedVideo) {
       const el = item.el;
       const rawUrl = buildUrl(item.url);
-      let sourceForFirstAttempt = rawUrl;
 
       try {
-        const cacheMatch = await caches.match(rawUrl);
-        if (cacheMatch) {
-          const blob = await cacheMatch.blob();
-          if (isCacheEntryValid(cacheMatch, blob)) {
-            const blobUrl = URL.createObjectURL(blob);
-            blobUrlsRef.current.add(blobUrl);
-            sourceForFirstAttempt = blobUrl;
-          } else {
-            console.warn(
-              "[usePrepareVideos] Entrada de caché inválida/incompleta, se descarta:",
-              rawUrl
-            );
-            await deleteCachedEntry(rawUrl);
-            // sourceForFirstAttempt se queda en rawUrl (red).
-          }
-        }
-      } catch {
-        // Fallback silencioso a la URL de red si algo falla al leer la caché.
-      }
-
-      try {
-        await attemptLoad(el, sourceForFirstAttempt, timeoutMs);
+        await attemptLoad(el, rawUrl, timeoutMs);
         item.ready = true;
         item.error = undefined;
       } catch (e) {
-        console.error("[usePrepareVideos] Error cargando:", sourceForFirstAttempt, e);
+        console.error("[usePrepareVideos] Error cargando:", rawUrl, e);
 
-        // Si el intento fallido vino de un blob de caché (pasó la
-        // validación de tamaño pero se rompió igual — caso raro no
-        // cubierto por isCacheEntryValid), la borramos: si no, sigue
-        // corrupta para la próxima carga.
-        if (sourceForFirstAttempt !== rawUrl) {
-          await deleteCachedEntry(rawUrl);
-        }
-
-        // Un único reintento, siempre directo por red (nunca vuelve a
-        // mirar la caché) — evita ciclos infinitos.
         try {
           await attemptLoad(el, rawUrl, timeoutMs);
           item.ready = true;
@@ -248,9 +208,8 @@ export function usePrepareVideos(sources: string[], opts: Options = {}) {
 
     return () => {
       cancelledRef.current = true;
-      // Revocar blobs para liberar memoria
-      blobUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
-      blobUrlsRef.current.clear();
+      // Ya no se crean Object URLs en el camino online (ver loadOne), así
+      // que no queda nada que revocar acá.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources.join("|"), preloadMode]);
