@@ -62,7 +62,7 @@ export default function VideoBackground({
       <video
         ref={videoRef}
         key={src}
-        className={`absolute inset-0 w-full h-full object-cover lg:object-contain transition-opacity duration-700 ${
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
           isVideoLoaded ? 'opacity-100' : 'opacity-0'
         }`}
         src={resolvedSrc || src}

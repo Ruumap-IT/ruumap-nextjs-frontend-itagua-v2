@@ -12,6 +12,16 @@ import { DownloadLink } from "@/components/ui/DownloadLink";
 import { normalizeUnitTitle, getDisplayUnitTitle } from "@/utils/string";
 import { AssetImage } from "@/components/ui/AssetImage";
 
+// Solo para el texto secundario del modelo en el sidebar del plano de piso:
+// muestra "Modelo A" en vez de "Modelo A Pt1"/"Modelo A Con Balcón", ocultando
+// el sufijo de variante (que sí importa, sin tocar, en el dropdown de
+// Departamentos — ver normalizeUnitTitle en utils/string.ts).
+const getSimplifiedModelName = (title: string): string => {
+  const cleaned = title.replace(/\s+IT$/i, "").trim();
+  const match = cleaned.match(/^(Modelo\s+\S+)/i);
+  return match ? match[1] : cleaned;
+};
+
 interface UnitDetailsSidebarProps {
   unit?: Unit | null;
   project: ProjectData;
@@ -41,7 +51,9 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
     if (isModelView && modelData) return modelData;
     if (!unit) return null;
     return project.unit_types.find((ut) =>
-      ut.units.some((u) => u.title === unit.title && u.floor.level === unit.floor.level)
+      ut.units.some(
+        (u) => u.title === unit.title && u.floor.level === unit.floor.level,
+      ),
     );
   }, [unit, project, isModelView, modelData]);
 
@@ -61,7 +73,7 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
       .map((item) => {
         if (item.channel === "WHATSAPP") {
           const message = encodeURIComponent(
-            `¡Hola! Me interesa el departamento ${displayTitle}. ¿Podrían darme más detalles?`
+            `¡Hola! Me interesa el departamento ${displayTitle}. ¿Podrían darme más detalles?`,
           );
           return { ...item, href: `${item.href}?text=${message}` };
         }
@@ -84,8 +96,8 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
 
   const availableUnitsCount = useMemo(() => {
     if (!unitType?.units) return 0;
-    return unitType.units.filter(u =>
-      u.availability_status?.code === "AVAILABLE"
+    return unitType.units.filter(
+      (u) => u.availability_status?.code === "AVAILABLE",
     ).length;
   }, [unitType]);
 
@@ -95,7 +107,7 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
     return isModelView ? unitType?.price : unit?.price;
   }, [isModelView, unitType, unit]);
 
-  const isVisible = isOpen !== undefined ? isOpen : (!!unit || isModelView);
+  const isVisible = isOpen !== undefined ? isOpen : !!unit || isModelView;
 
   return (
     <AnimatePresence>
@@ -136,9 +148,16 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
 
                   <div className="flex flex-col gap-4">
                     <div>
-                      {/* Título Principal: Nombre del Modelo Normalizado */}
-                      <h3 className="text-[28px] font-medium text-gray-900 leading-[36px]">
-                        {unitType?.title ? unitType.title.replace(/\s+IT$/i, "").trim() : displayTitle}
+                      {/* Título Principal: en vista de modelo (Departamentos) es el
+                          nombre del modelo; en vista de plano de piso es la unidad
+                          puntual (ej. "8E") — el nombre del modelo pasa a texto
+                          secundario más abajo, junto al badge de estado. */}
+                      <h3 className="text-[28px] font-medium text-gray-900 leading-9">
+                        {isModelView
+                          ? unitType?.title
+                            ? unitType.title.replace(/\s+IT$/i, "").trim()
+                            : displayTitle
+                          : displayTitle}
                       </h3>
                     </div>
 
@@ -146,7 +165,7 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                       <div className="flex items-center gap-3 flex-wrap">
                         {/* Badge de unidades disponibles */}
                         <div
-                          className="inline-flex items-center px-2.5 h-[26px] rounded-[4px] text-[13px] font-medium whitespace-nowrap"
+                          className="inline-flex items-center px-2.5 h-6.5 rounded-sm text-[13px] font-medium whitespace-nowrap"
                           style={{
                             backgroundColor: "rgba(34, 181, 78, 0.1)",
                             border: "1px solid #22B54E",
@@ -154,17 +173,20 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                           }}
                         >
                           <span>
-                            {availableUnitsCount} {availableUnitsCount === 1 ? "Unidad disponible" : "Unidades disponibles"}
+                            {availableUnitsCount}{" "}
+                            {availableUnitsCount === 1
+                              ? "Unidad disponible"
+                              : "Unidades disponibles"}
                           </span>
                         </div>
                       </div>
                     )}
 
                     {!isModelView && unit && (
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         {/* Badge de Disponibilidad */}
                         <div
-                          className="inline-flex items-center gap-1.5 px-2.5 h-[26px] rounded-md text-[13px] font-medium"
+                          className="inline-flex items-center gap-1.5 px-2.5 h-6.5 rounded-md text-[13px] font-medium"
                           style={{
                             backgroundColor: statusColor,
                             color: "#ffffff",
@@ -174,7 +196,7 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                             <AssetImage
                               src={unit.availability_status.icon.url}
                               alt={unit.availability_status.label}
-                              className="w-[14px] h-[14px] object-contain"
+                              className="w-3.5 h-3.5 object-contain"
                             />
                           )}
                           <span>
@@ -182,10 +204,12 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                           </span>
                         </div>
 
-                        {/* Título de la unidad ("8E") */}
-                        <span className="text-[14px] text-gray-700 font-medium">
-                          {displayTitle}
-                        </span>
+                        {/* Nombre del modelo (secundario, simplificado) */}
+                        {unitType?.title && (
+                          <span className="text-[14px] text-gray-700 font-medium">
+                            {getSimplifiedModelName(unitType.title)}
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -196,8 +220,12 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                           Precio
                         </p>
                         <p className="leading-none">
-                          <span className="text-[22px] font-semibold text-gray-900">{priceValue}</span>
-                          <span className="ml-1 text-[13px] font-medium text-gray-500">US.</span>
+                          <span className="text-[22px] font-semibold text-gray-900">
+                            {priceValue}
+                          </span>
+                          <span className="ml-1 text-[13px] font-medium text-gray-500">
+                            US.
+                          </span>
                         </p>
                       </div>
                     )}
@@ -210,11 +238,15 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                       <div className="border-t border-[#CDCDCD] -mx-6"></div>
                       <div className="mt-4">
                         <button
-                          className="w-full h-[44px] rounded-[8px] bg-[#343330] text-white text-[14px] font-medium hover:opacity-90 transition-opacity"
+                          className="w-full h-11 rounded-lg bg-[#343330] text-white text-[14px] font-medium hover:opacity-90 transition-opacity"
                           onClick={() => {
                             if (unitType) {
-                              const modelSlug = normalizeUnitTitle(unitType.title);
-                              router.push(`/departments/${encodeURIComponent(modelSlug)}`);
+                              const modelSlug = normalizeUnitTitle(
+                                unitType.title,
+                              );
+                              router.push(
+                                `/departments/${encodeURIComponent(modelSlug)}`,
+                              );
                             }
                           }}
                         >
@@ -241,7 +273,7 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                               <AssetImage
                                 src={f.icon.url}
                                 alt={f.label}
-                                className="w-[18px] h-[18px] object-contain opacity-70"
+                                className="w-4.5 h-4.5 object-contain opacity-70"
                               />
                               <span>{f.label}</span>
                             </div>
@@ -259,22 +291,25 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                       </h4>
                       <div className="space-y-3">
                         {/* 1. Muestra brochures específicos del modelo si existen */}
-                        {documents.length > 0 && documents.map((d, i) => {
-                          const fileUrl = d.document?.url;
-                          if (!fileUrl) return null;
+                        {documents.length > 0 &&
+                          documents.map((d, i) => {
+                            const fileUrl = d.document?.url;
+                            if (!fileUrl) return null;
 
-                          return (
-                            <DownloadLink
-                              key={`unit-doc-${i}`}
-                              fileUrl={fileUrl}
-                              fileName={d.title}
-                              className="flex items-center gap-3 text-[14px] text-gray-900 hover:text-gray-600 transition-colors w-full text-left active:scale-95"
-                              icon={<BrochureIcon className="w-5 h-5 opacity-60" />}
-                            >
-                              <span className="truncate">{d.title}</span>
-                            </DownloadLink>
-                          );
-                        })}
+                            return (
+                              <DownloadLink
+                                key={`unit-doc-${i}`}
+                                fileUrl={fileUrl}
+                                fileName={d.title}
+                                className="flex items-center gap-3 text-[14px] text-gray-900 hover:text-gray-600 transition-colors w-full text-left active:scale-95"
+                                icon={
+                                  <BrochureIcon className="w-5 h-5 opacity-60" />
+                                }
+                              >
+                                <span className="truncate">{d.title}</span>
+                              </DownloadLink>
+                            );
+                          })}
 
                         {/* 2. Fallback: Muestra el brochure global del proyecto solo si no hay específicos */}
                         {documents.length === 0 && project.brochure?.url && (
@@ -282,7 +317,9 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
                             fileUrl={project.brochure.url}
                             fileName="Itagua Brochure"
                             className="flex items-center gap-3 text-[14px] text-gray-900 hover:text-gray-600 transition-colors w-full text-left active:scale-95"
-                            icon={<BrochureIcon className="w-5 h-5 opacity-60" />}
+                            icon={
+                              <BrochureIcon className="w-5 h-5 opacity-60" />
+                            }
                           >
                             <span className="truncate">Itagua Brochure</span>
                           </DownloadLink>
@@ -296,12 +333,12 @@ export const UnitDetailsSidebar: React.FC<UnitDetailsSidebarProps> = ({
               {contactLinks.length > 0 && (
                 <div className="bg-white px-6 py-4 border-t border-[#CDCDCD] rounded-b-none lg:rounded-b-3xl">
                   <div className="flex items-center justify-between">
-                    <div className="text-[14px] font-medium text-[#303030] leading-[20px]">
+                    <div className="text-[14px] font-medium text-[#303030] leading-5">
                       Solicita información
                     </div>
                     <div className="flex items-center gap-3">
                       {contactLinks
-                        .filter(contact => contact.value !== "FOOTER_LOGO")
+                        .filter((contact) => contact.value !== "FOOTER_LOGO")
                         .map((contact, i) => (
                           <a
                             key={i}
