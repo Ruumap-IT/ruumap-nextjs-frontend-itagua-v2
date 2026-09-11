@@ -18,32 +18,6 @@ const LOADING_HINT_DELAY_MS = 250;
 /**
  * FloorPlanImage - visor de planos que NUNCA muestra un hueco en blanco al
  * cambiar de piso, ni en conexiones lentas.
- *
- * A diferencia de AssetImage (usado en el resto de la app — sidebar,
- * contacto, redes — donde un fade/blur breve es aceptable porque la imagen
- * casi siempre está lista o es chica), acá el requisito es más estricto:
- * el plano nuevo puede tardar segundos en bajar en una conexión mala, y
- * durante todo ese tiempo el usuario tiene que seguir viendo ALGO, no una
- * pantalla vacía.
- *
- * Estrategia (dos capas apiladas, "stale-while-revalidate" visual):
- *  1. `baseSrc` es el último plano que terminó de mostrarse por completo.
- *     Se queda montado y visible TODO el tiempo, incluso mientras el
- *     siguiente piso está cargando.
- *  2. Al pedir un piso nuevo, primero se sondea de forma sincrónica si el
- *     navegador ya lo tiene en caché (con un `new Image()` no montado, sin
- *     depender de que un <img> ya esté en el DOM). Si ya está: se reemplaza
- *     directo, sin animación — no hace falta esperar nada.
- *  3. Si genuinamente hay que descargarlo: se monta como capa "incoming"
- *     en opacity:0, ENCIMA de `baseSrc` (que se sigue viendo). Cuando
- *     termina de cargar (o falla — no bloqueamos por una imagen rota), se
- *     hace un crossfade de 300ms. Al terminar la transición, "incoming" se
- *     promueve a `baseSrc` y se libera.
- *
- * Resultado: en el peor caso (piso nunca visitado, red lenta) el usuario
- * sigue viendo el piso anterior más tiempo — nunca ve blanco. Un indicador
- * sutil (esquina inferior) avisa que algo sigue cargando si la espera se
- * nota, para que no parezca que el click no funcionó.
  */
 export function FloorPlanImage({ src, alt, className = "" }: Props) {
   const resolvedSrc = useAssetResolver(src);

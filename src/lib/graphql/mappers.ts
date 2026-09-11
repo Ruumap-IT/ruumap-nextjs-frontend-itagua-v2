@@ -24,7 +24,9 @@ const getMediaUrl = (url: string | undefined | null): string => {
   if (!url) return "";
   if (url.startsWith("http")) return url;
   // Limpiamos barras duplicadas por si acaso
-  const cleanBase = ENV.CDN_URL.endsWith("/") ? ENV.CDN_URL.slice(0, -1) : ENV.CDN_URL;
+  const cleanBase = ENV.CDN_URL.endsWith("/")
+    ? ENV.CDN_URL.slice(0, -1)
+    : ENV.CDN_URL;
   const cleanPath = url.startsWith("/") ? url : `/${url}`;
   return `${cleanBase}${cleanPath}`;
 };
@@ -128,9 +130,12 @@ export const mapUnitType = (unitType: any): UnitType => {
   // Simulando tipología si no viene de la API
   let mockTypology = unitType?.typology || "Monoambiente";
   if (!unitType?.typology) {
-    if (unitType?.title?.toUpperCase().includes("A")) mockTypology = "Monoambiente";
-    else if (unitType?.title?.toUpperCase().includes("B")) mockTypology = "2 Habitaciones";
-    else if (unitType?.title?.toUpperCase().includes("C")) mockTypology = "1 Habitación";
+    if (unitType?.title?.toUpperCase().includes("A"))
+      mockTypology = "Monoambiente";
+    else if (unitType?.title?.toUpperCase().includes("B"))
+      mockTypology = "2 Habitaciones";
+    else if (unitType?.title?.toUpperCase().includes("C"))
+      mockTypology = "1 Habitación";
     else mockTypology = "Estudio";
   }
 
@@ -139,15 +144,20 @@ export const mapUnitType = (unitType: any): UnitType => {
   const rawPrices = (unitType?.units || [])
     .map((u: any) => parseRawPrice(u?.price))
     .filter((p: number | undefined): p is number => p !== undefined);
-  const minPrice = rawPrices.length > 0 ? formatPrice(Math.min(...rawPrices)) : undefined;
+  const minPrice =
+    rawPrices.length > 0 ? formatPrice(Math.min(...rawPrices)) : undefined;
 
   return {
     title: unitType?.title || "",
     features: (unitType?.features || []).map(mapFeature),
-    unit_type_documents: (unitType?.unit_type_documents || []).map(mapUnitTypeDocument),
+    unit_type_documents: (unitType?.unit_type_documents || []).map(
+      mapUnitTypeDocument,
+    ),
     units: (unitType?.units || []).map(mapUnit),
     gallery: (unitType?.gallery || []).map(mapMediaFile),
-    panoramic_view: unitType?.panoramic_view ? mapMediaFile(unitType.panoramic_view) : null,
+    panoramic_view: unitType?.panoramic_view
+      ? mapMediaFile(unitType.panoramic_view)
+      : null,
     floorplan_3d: mapMediaFile(unitType?.floorplan_3d),
     floorplan_2d: mapMediaFile(unitType?.floorplan_2d),
     tour_url: unitType?.tour_url || null,
@@ -179,13 +189,17 @@ export const mapProjectData = (project: any): ProjectData => ({
   partnert: mapPartner(project?.partnert),
 });
 
-export const mapProjectsResponse = (response: ProjectsResponse | any): ProjectData => {
+export const mapProjectsResponse = (
+  response: ProjectsResponse | any,
+): ProjectData => {
   const root = response?.data || response; // Dependiendo de la versión de graphql-request
   const projects = root?.projects || [];
   const project = projects[0];
 
   if (!project) {
-    throw new Error(`No se encontraron proyectos para el slug: ${ENV.PROJECT_SLUG}`);
+    throw new Error(
+      `No se encontraron proyectos para el slug: ${ENV.PROJECT_SLUG}`,
+    );
   }
 
   const mappedProject = mapProjectData(project);
@@ -218,7 +232,9 @@ interface RawRevisionRoot {
 // insensible al orden (ordenamos por documentId antes de unir), para que
 // agregar/quitar/reordenar registros en la respuesta de Strapi siempre
 // cambie la clave, sin falsos "cambió" solo por el orden de llegada.
-const serializeEntities = (entities: RevisionEntity[] | null | undefined): string =>
+const serializeEntities = (
+  entities: RevisionEntity[] | null | undefined,
+): string =>
   (entities ?? [])
     .map((e) => `${e?.documentId ?? ""}:${e?.updatedAt ?? ""}`)
     .sort()
@@ -235,7 +251,9 @@ const serializeEntities = (entities: RevisionEntity[] | null | undefined): strin
 // incluir unitTypes/units/unitTypeDocuments: son content-types
 // independientes en Strapi, confirmado por introspección — su updatedAt no
 // se refleja en `projects.updatedAt`.
-export const computeRevisionKey = (root: RawRevisionRoot | null | undefined): string => {
+export const computeRevisionKey = (
+  root: RawRevisionRoot | null | undefined,
+): string => {
   const projectUpdatedAt = root?.projects?.[0]?.updatedAt ?? "";
   const floorsUpdatedAt = (root?.floors ?? [])
     .map((f) => f?.updatedAt ?? "")
@@ -277,18 +295,26 @@ export const getAllFloors = (project: ProjectData): Floor[] => {
   });
 
   return Array.from(floorsMap.values())
-    .filter((floor) => floor.level >= 35 && floor.level <= 50)
+    .filter((floor) => floor.level >= 35 && floor.level < 50)
     .sort((a, b) => b.level - a.level);
 };
 
-export const getUnitsByFloor = (project: ProjectData, floorLevel: number): Unit[] => {
+export const getUnitsByFloor = (
+  project: ProjectData,
+  floorLevel: number,
+): Unit[] => {
   const allUnits = getAllUnits(project);
   return allUnits.filter((unit) => unit.floor.level === floorLevel);
 };
 
-export const getUnitsByAvailability = (project: ProjectData, availabilityCode: string): Unit[] => {
+export const getUnitsByAvailability = (
+  project: ProjectData,
+  availabilityCode: string,
+): Unit[] => {
   const allUnits = getAllUnits(project);
-  return allUnits.filter((unit) => unit.availability_status.code === availabilityCode);
+  return allUnits.filter(
+    (unit) => unit.availability_status.code === availabilityCode,
+  );
 };
 
 export const getOrderedFlythroughs = (project: ProjectData): Flythrough[] => {
@@ -303,13 +329,20 @@ export const getOrderedDocuments = (unitType: UnitType): UnitTypeDocument[] => {
   return [...unitType.unit_type_documents].sort((a, b) => a.order - b.order);
 };
 
-export const getUnitTypesByCategory = (project: ProjectData, category: string): UnitType[] => {
-  return project.unit_types.filter((unitType) => unitType.category === category);
+export const getUnitTypesByCategory = (
+  project: ProjectData,
+  category: string,
+): UnitType[] => {
+  return project.unit_types.filter(
+    (unitType) => unitType.category === category,
+  );
 };
 
-
-
-export const formatCoordinatesForSVG = (unit: Unit, viewBoxWidth: number = 100, viewBoxHeight: number = 100) => ({
+export const formatCoordinatesForSVG = (
+  unit: Unit,
+  viewBoxWidth: number = 100,
+  viewBoxHeight: number = 100,
+) => ({
   x: (unit.centroid_point.x / 100) * viewBoxWidth,
   y: (unit.centroid_point.y / 100) * viewBoxHeight,
   shape: unit.shape_viewbox.shape,
@@ -329,4 +362,3 @@ export const groupUnitsByFloor = (project: ProjectData) => {
 
   return result;
 };
-
